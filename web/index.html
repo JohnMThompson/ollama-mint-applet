@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Mistral Chat</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <button class="new-chat" id="newChatButton" type="button">+ New chat</button>
+        </div>
+        <div class="search-wrap">
+          <input id="searchInput" type="search" placeholder="Search chats" autocomplete="off">
+        </div>
+        <nav class="chat-list" id="chatList" aria-label="Chat history"></nav>
+        <div class="sidebar-footer">
+          <button class="ghost-button" id="clearHistoryButton" type="button">Clear history</button>
+        </div>
+      </aside>
+
+      <main class="chat-panel">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="menuButton" type="button" aria-label="Toggle sidebar">☰</button>
+          <div class="title-block">
+            <strong id="chatTitle">New chat</strong>
+            <span id="connectionStatus">Checking Ollama...</span>
+          </div>
+          <div class="controls">
+            <select id="modelSelect" aria-label="Model"></select>
+            <button class="ghost-button" id="settingsButton" type="button">Settings</button>
+          </div>
+        </header>
+
+        <section class="settings-panel" id="settingsPanel" hidden>
+          <label>
+            System prompt
+            <textarea id="systemPrompt" rows="3" placeholder="Optional instructions for this chat"></textarea>
+          </label>
+          <div class="setting-grid">
+            <label>
+              Temperature
+              <input id="temperatureInput" type="number" min="0" max="2" step="0.1" value="0.7">
+            </label>
+            <label>
+              Context messages
+              <input id="contextInput" type="number" min="2" max="40" step="1" value="16">
+            </label>
+          </div>
+        </section>
+
+        <section class="messages" id="messages" aria-live="polite"></section>
+
+        <form class="composer" id="composer">
+          <textarea id="promptInput" rows="1" placeholder="Message Mistral..." autocomplete="off"></textarea>
+          <button class="send-button" id="sendButton" type="submit">Send</button>
+          <button class="stop-button" id="stopButton" type="button" hidden>Stop</button>
+        </form>
+      </main>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

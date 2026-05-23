@@ -1,0 +1,481 @@
+const STORAGE_KEY = "local-mistral-chat-state-v1";
+
+const els = {
+  chatList: document.querySelector("#chatList"),
+  chatTitle: document.querySelector("#chatTitle"),
+  clearHistoryButton: document.querySelector("#clearHistoryButton"),
+  composer: document.querySelector("#composer"),
+  connectionStatus: document.querySelector("#connectionStatus"),
+  contextInput: document.querySelector("#contextInput"),
+  menuButton: document.querySelector("#menuButton"),
+  messages: document.querySelector("#messages"),
+  modelSelect: document.querySelector("#modelSelect"),
+  newChatButton: document.querySelector("#newChatButton"),
+  promptInput: document.querySelector("#promptInput"),
+  searchInput: document.querySelector("#searchInput"),
+  sendButton: document.querySelector("#sendButton"),
+  settingsButton: document.querySelector("#settingsButton"),
+  settingsPanel: document.querySelector("#settingsPanel"),
+  sidebar: document.querySelector("#sidebar"),
+  stopButton: document.querySelector("#stopButton"),
+  systemPrompt: document.querySelector("#systemPrompt"),
+  temperatureInput: document.querySelector("#temperatureInput"),
+};
+
+let state = loadState();
+let abortController = null;
+
+init();
+
+async function init() {
+  bindEvents();
+  render();
+  await loadModels();
+}
+
+function bindEvents() {
+  els.newChatButton.addEventListener("click", () => {
+    createChat();
+    closeMobileSidebar();
+  });
+
+  els.clearHistoryButton.addEventListener("click", () => {
+    if (!state.chats.length || !confirm("Clear all chat history?")) return;
+    state = { ...state, chats: [], activeChatId: null };
+    createChat({ persistNow: false });
+  });
+
+  els.searchInput.addEventListener("input", renderChatList);
+  els.settingsButton.addEventListener("click", () => {
+    els.settingsPanel.hidden = !els.settingsPanel.hidden;
+  });
+  els.menuButton.addEventListener("click", () => els.sidebar.classList.toggle("open"));
+  els.stopButton.addEventListener("click", stopGeneration);
+
+  els.promptInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      els.composer.requestSubmit();
+    }
+  });
+
+  els.composer.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const content = els.promptInput.value.trim();
+    if (!content || abortController) return;
+    await sendMessage(content);
+  });
+
+  for (const input of [els.systemPrompt, els.temperatureInput, els.contextInput, els.modelSelect]) {
+    input.addEventListener("change", saveCurrentSettings);
+  }
+}
+
+function loadState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (parsed && Array.isArray(parsed.chats)) return parsed;
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+  return { chats: [], activeChatId: null };
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function loadModels() {
+  try {
+    const response = await fetch("/api/models");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to load models");
+    const names = data.models.map((model) => model.name).filter(Boolean);
+    const selected = resolveModelName(activeChat()?.settings?.model || data.defaultModel || "mistral", names);
+    const uniqueNames = [...new Set([selected, ...names])];
+    els.modelSelect.replaceChildren(...uniqueNames.map((name) => new Option(name, name)));
+    els.modelSelect.value = selected;
+    const chat = activeChat();
+    if (chat && chat.settings.model !== selected) {
+      chat.settings.model = selected;
+      saveState();
+    }
+    els.connectionStatus.textContent = names.length ? `Connected to Ollama (${names.length} model${names.length === 1 ? "" : "s"})` : "Connected to Ollama";
+  } catch (error) {
+    const selected = activeChat()?.settings?.model || "mistral";
+    els.modelSelect.replaceChildren(new Option(selected, selected));
+    els.modelSelect.value = selected;
+    els.connectionStatus.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
+function resolveModelName(preferred, names) {
+  if (names.includes(preferred)) return preferred;
+  return names.find((name) => name === `${preferred}:latest` || name.startsWith(`${preferred}:`)) || preferred;
+}
+
+function createChat({ persistNow = true } = {}) {
+  const chat = {
+    id: crypto.randomUUID(),
+    title: "New chat",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: [],
+    settings: defaultSettings(),
+  };
+  state.chats.unshift(chat);
+  state.activeChatId = chat.id;
+  if (persistNow) saveState();
+  render();
+}
+
+function defaultSettings() {
+  return {
+    model: els.modelSelect.value || "mistral",
+    systemPrompt: "",
+    temperature: 0.7,
+    contextMessages: 16,
+  };
+}
+
+function activeChat() {
+  return state.chats.find((chat) => chat.id === state.activeChatId) || null;
+}
+
+function ensureActiveChat() {
+  if (!activeChat()) createChat({ persistNow: false });
+  return activeChat();
+}
+
+function render() {
+  const chat = ensureActiveChat();
+  els.chatTitle.textContent = chat.title;
+  els.systemPrompt.value = chat.settings.systemPrompt || "";
+  els.temperatureInput.value = chat.settings.temperature ?? 0.7;
+  els.contextInput.value = chat.settings.contextMessages ?? 16;
+  if (chat.settings.model) els.modelSelect.value = chat.settings.model;
+  renderChatList();
+  renderMessages();
+  saveState();
+}
+
+function renderChatList() {
+  const term = els.searchInput.value.trim().toLowerCase();
+  const chats = state.chats.filter((chat) => chat.title.toLowerCase().includes(term));
+  els.chatList.replaceChildren(...chats.map(renderChatItem));
+}
+
+function renderChatItem(chat) {
+  const item = document.createElement("div");
+  item.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
+  item.tabIndex = 0;
+  item.role = "button";
+  const openChat = () => {
+    state.activeChatId = chat.id;
+    render();
+    closeMobileSidebar();
+  };
+  item.addEventListener("click", openChat);
+  item.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openChat();
+    }
+  });
+
+  const label = document.createElement("span");
+  label.className = "chat-item-title";
+  label.textContent = chat.title;
+
+  const meta = document.createElement("span");
+  meta.className = "chat-item-time";
+  meta.textContent = formatDate(chat.updatedAt);
+
+  const text = document.createElement("span");
+  text.className = "chat-item-text";
+  text.append(label, meta);
+
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "delete-chat";
+  del.textContent = "×";
+  del.title = "Delete chat";
+  del.addEventListener("click", (event) => {
+    event.stopPropagation();
+    deleteChat(chat.id);
+  });
+
+  item.append(text, del);
+  return item;
+}
+
+function renderMessages() {
+  const chat = activeChat();
+  if (!chat || chat.messages.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.innerHTML = "<div><h1>Local Mistral Chat</h1><p>Ask a question, draft something, or continue a saved conversation.</p></div>";
+    els.messages.replaceChildren(empty);
+    return;
+  }
+
+  const thread = document.createElement("div");
+  thread.className = "thread";
+  for (const message of chat.messages) {
+    thread.append(renderMessage(message));
+  }
+  els.messages.replaceChildren(thread);
+  scrollToBottom();
+}
+
+function renderMessage(message) {
+  const row = document.createElement("article");
+  row.className = `message ${message.role}`;
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.textContent = message.role === "assistant" ? "M" : "You";
+
+  const content = document.createElement("div");
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = renderMarkdown(message.content || "");
+  content.append(bubble);
+
+  if (message.content) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const copy = document.createElement("button");
+    copy.className = "copy-button";
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(message.content);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1200);
+    });
+    actions.append(copy);
+    content.append(actions);
+  }
+
+  row.append(avatar, content);
+  return row;
+}
+
+async function sendMessage(content) {
+  const chat = ensureActiveChat();
+  const userMessage = { role: "user", content, createdAt: Date.now() };
+  const assistantMessage = { role: "assistant", content: "", createdAt: Date.now() };
+  chat.messages.push(userMessage, assistantMessage);
+  chat.updatedAt = Date.now();
+  els.promptInput.value = "";
+  setGenerating(true);
+  render();
+
+  abortController = new AbortController();
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildRequest(chat)),
+      signal: abortController.signal,
+    });
+    if (!response.ok || !response.body) throw new Error(`Chat request failed (${response.status})`);
+    await readStream(response.body, (chunk) => {
+      assistantMessage.content += chunk;
+      chat.updatedAt = Date.now();
+      renderMessages();
+      saveState();
+    });
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      assistantMessage.content += `\n\nError: ${error.message}`;
+      showToast(error.message);
+    }
+  } finally {
+    abortController = null;
+    setGenerating(false);
+    chat.updatedAt = Date.now();
+    render();
+    if (chat.title === "New chat" && assistantMessage.content.trim()) {
+      summarizeChatTitle(chat);
+    }
+  }
+}
+
+function buildRequest(chat) {
+  const settings = chat.settings;
+  const contextCount = Number(settings.contextMessages || 16);
+  const messages = chat.messages
+    .filter((message) => message.content)
+    .slice(-contextCount)
+    .map(({ role, content }) => ({ role, content }));
+
+  if (settings.systemPrompt?.trim()) {
+    messages.unshift({ role: "system", content: settings.systemPrompt.trim() });
+  }
+
+  return {
+    model: settings.model || "mistral",
+    messages,
+    options: {
+      temperature: Number(settings.temperature ?? 0.7),
+    },
+  };
+}
+
+async function readStream(body, onToken) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const data = JSON.parse(line);
+      if (data.error) throw new Error(data.error);
+      if (data.message?.content) onToken(data.message.content);
+    }
+  }
+}
+
+async function summarizeChatTitle(chat) {
+  const firstUserMessage = chat.messages.find((message) => message.role === "user")?.content || "";
+  const firstAssistantMessage = chat.messages.find((message) => message.role === "assistant")?.content || "";
+  if (!firstUserMessage || !firstAssistantMessage) return;
+
+  chat.title = makeFallbackTitle(firstUserMessage);
+  render();
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: chat.settings.model || "mistral",
+        messages: [
+          {
+            role: "system",
+            content: "Create a concise chat title. Use 3 to 6 words. No quotes, punctuation, labels, or extra text.",
+          },
+          {
+            role: "user",
+            content: `User asked:\n${firstUserMessage}\n\nAssistant answered:\n${firstAssistantMessage.slice(0, 1200)}`,
+          },
+        ],
+        options: { temperature: 0.2 },
+      }),
+    });
+    if (!response.ok || !response.body) return;
+
+    let title = "";
+    await readStream(response.body, (chunk) => {
+      title += chunk;
+    });
+    const cleaned = cleanTitle(title);
+    if (cleaned) {
+      chat.title = cleaned;
+      chat.updatedAt = Date.now();
+      render();
+    }
+  } catch {
+    saveState();
+  }
+}
+
+function saveCurrentSettings() {
+  const chat = ensureActiveChat();
+  chat.settings = {
+    model: els.modelSelect.value || "mistral",
+    systemPrompt: els.systemPrompt.value,
+    temperature: Number(els.temperatureInput.value || 0.7),
+    contextMessages: Number(els.contextInput.value || 16),
+  };
+  saveState();
+}
+
+function deleteChat(id) {
+  state.chats = state.chats.filter((chat) => chat.id !== id);
+  if (state.activeChatId === id) state.activeChatId = state.chats[0]?.id || null;
+  render();
+}
+
+function stopGeneration() {
+  abortController?.abort();
+}
+
+function setGenerating(isGenerating) {
+  els.sendButton.disabled = isGenerating;
+  els.promptInput.disabled = isGenerating;
+  els.stopButton.hidden = !isGenerating;
+}
+
+function scrollToBottom() {
+  requestAnimationFrame(() => {
+    els.messages.scrollTop = els.messages.scrollHeight;
+  });
+}
+
+function closeMobileSidebar() {
+  els.sidebar.classList.remove("open");
+}
+
+function makeFallbackTitle(content) {
+  const stopWords = new Set(["about", "after", "again", "also", "because", "before", "could", "from", "have", "into", "just", "like", "make", "more", "should", "that", "this", "with", "would", "what", "when", "where", "which", "your"]);
+  const words = content
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !stopWords.has(word))
+    .slice(0, 5);
+  if (!words.length) return "New conversation";
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function cleanTitle(title) {
+  return title
+    .replace(/["'`]/g, "")
+    .replace(/^title:\s*/i, "")
+    .replace(/[.?!:;]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 7)
+    .join(" ");
+}
+
+function formatDate(timestamp) {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(timestamp));
+}
+
+function showToast(message) {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  document.body.append(toast);
+  setTimeout(() => toast.remove(), 4200);
+}
+
+function renderMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const withBlocks = escaped.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.trim()}</code></pre>`);
+  return withBlocks
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
+}
+
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
