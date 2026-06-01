@@ -1,6 +1,6 @@
-# Local Mistral Chat
+# Linux Mint Local LLM Applet
 
-A small, dependency-free chat interface for an Ollama-hosted Mistral model.
+A small, dependency-free chat interface for an Ollama models.
 
 The project includes:
 
@@ -13,11 +13,11 @@ The project includes:
 
 ### Cinnamon applet popup
 
-![Local Mistral Chat Cinnamon applet popup](docs/applet-popup.png)
+![Local LLM  Chat Cinnamon applet popup](docs/applet-popup.png)
 
 ### Full browser UI
 
-![Local Mistral Chat browser interface](docs/web-ui.png)
+![Local LLM Chat browser interface](docs/web-ui.png)
 
 ## Requirements
 
