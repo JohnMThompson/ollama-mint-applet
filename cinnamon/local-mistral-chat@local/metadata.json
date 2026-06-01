@@ -1,0 +1,7 @@
+{
+  "uuid": "local-mistral-chat@local",
+  "name": "Local Mistral Chat",
+  "description": "Quick chat popup for the local Ollama-backed chat interface",
+  "version": "1.0.0",
+  "cinnamon-version": ["6.0"]
+}

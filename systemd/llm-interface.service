@@ -1,0 +1,16 @@
+[Unit]
+Description=Local Mistral Chat Interface
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO_DIR@
+Environment=PORT=3000
+Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
+Environment=OLLAMA_MODEL=mistral
+ExecStart=@REPO_DIR@/scripts/run-llm-interface-service.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

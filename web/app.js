@@ -206,7 +206,22 @@ function renderChatItem(chat) {
     deleteChat(chat.id);
   });
 
-  item.append(text, del);
+  const rename = document.createElement("button");
+  rename.type = "button";
+  rename.className = "rename-chat";
+  rename.textContent = "✎";
+  rename.title = "Rename chat";
+  rename.setAttribute("aria-label", "Rename chat");
+  rename.addEventListener("click", (event) => {
+    event.stopPropagation();
+    renameChat(chat.id);
+  });
+
+  const actions = document.createElement("span");
+  actions.className = "chat-item-actions";
+  actions.append(rename, del);
+
+  item.append(text, actions);
   return item;
 }
 
@@ -362,7 +377,7 @@ async function summarizeChatTitle(chat) {
         messages: [
           {
             role: "system",
-            content: "Create a concise chat title. Use 3 to 6 words. No quotes, punctuation, labels, or extra text.",
+            content: "Create a concise chat title for the broad topic only. Use 2 to 4 words. Do not include a colon, subtitle, quotes, punctuation, labels, or extra text.",
           },
           {
             role: "user",
@@ -406,6 +421,21 @@ function deleteChat(id) {
   render();
 }
 
+function renameChat(id) {
+  const chat = state.chats.find((item) => item.id === id);
+  if (!chat) return;
+
+  const title = prompt("Rename chat", chat.title);
+  if (title === null) return;
+
+  const cleaned = cleanManualTitle(title);
+  if (!cleaned) return;
+
+  chat.title = cleaned;
+  chat.updatedAt = Date.now();
+  render();
+}
+
 function stopGeneration() {
   abortController?.abort();
 }
@@ -442,12 +472,17 @@ function cleanTitle(title) {
   return title
     .replace(/["'`]/g, "")
     .replace(/^title:\s*/i, "")
+    .split(":")[0]
     .replace(/[.?!:;]+$/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .split(" ")
-    .slice(0, 7)
+    .slice(0, 4)
     .join(" ");
+}
+
+function cleanManualTitle(title) {
+  return title.replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
 function formatDate(timestamp) {

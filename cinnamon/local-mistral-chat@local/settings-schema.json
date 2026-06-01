@@ -1,0 +1,31 @@
+{
+  "layout": {
+    "type": "layout",
+    "pages": ["general"],
+    "general": {
+      "type": "page",
+      "title": "General",
+      "sections": ["connection"]
+    },
+    "connection": {
+      "type": "section",
+      "title": "Connection",
+      "keys": ["server-url", "model-name"]
+    }
+  },
+  "server-url": {
+    "type": "entry",
+    "default": "http://127.0.0.1:3000",
+    "description": "Local chat server URL",
+    "tooltip": "The URL for this project's local Python server."
+  },
+  "model-name": {
+    "type": "combobox",
+    "default": "mistral",
+    "description": "Ollama model",
+    "options": {
+      "mistral": "mistral"
+    },
+    "tooltip": "The Ollama model name to use, for example mistral, llama3.2, or qwen2.5-coder."
+  }
+}
