@@ -14,6 +14,9 @@ const Util = imports.misc.util;
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:3000";
 const DEFAULT_MODEL = "mistral";
+const POPUP_CONTENT_WIDTH = 406;
+const MESSAGE_CONTENT_WIDTH = 386;
+const PROMPT_CONTENT_WIDTH = 384;
 
 class LocalMistralChatApplet extends Applet.TextApplet {
     constructor(metadata, orientation, panelHeight, instanceId) {
@@ -23,7 +26,6 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.messages = [];
         this.model = DEFAULT_MODEL;
         this.modelNames = [];
-        this.modelSelectorOpen = false;
         this.serverUrl = DEFAULT_SERVER_URL;
         this.modelName = DEFAULT_MODEL;
         this.activeMessage = null;
@@ -79,33 +81,25 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
         this.titleLabel = new St.Label({
             text: "Local Mistral Chat",
-            style_class: "local-mistral-chat-title"
+            style_class: "local-mistral-chat-title",
+            width: POPUP_CONTENT_WIDTH
         });
         this.statusLabel = new St.Label({
             text: "Checking Ollama...",
-            style_class: "local-mistral-chat-status"
+            style_class: "local-mistral-chat-status",
+            width: POPUP_CONTENT_WIDTH
         });
-        this.modelButton = new St.Button({
-            label: "Model: " + this.modelName,
-            style_class: "local-mistral-chat-model-button",
-            can_focus: true
-        });
-        this.modelButton.connect("clicked", Lang.bind(this, this._toggleModelSelector));
-        this.modelList = new St.BoxLayout({
-            vertical: true,
-            visible: false,
-            style_class: "local-mistral-chat-model-list"
-        });
+        this.statusLabel.clutter_text.line_wrap = true;
+        this.statusLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         header.add_actor(this.titleLabel);
         header.add_actor(this.statusLabel);
-        header.add_actor(this.modelButton);
-        header.add_actor(this.modelList);
 
         this.scrollView = new St.ScrollView({
             style_class: "local-mistral-chat-scroll",
             overlay_scrollbars: true,
             hscrollbar_policy: St.PolicyType.NEVER,
-            vscrollbar_policy: St.PolicyType.AUTOMATIC
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            width: POPUP_CONTENT_WIDTH
         });
 
         this.thread = new St.BoxLayout({
@@ -118,13 +112,15 @@ class LocalMistralChatApplet extends Applet.TextApplet {
             name: "local-mistral-chat-prompt",
             hint_text: "Ask a question...",
             can_focus: true,
-            style_class: "local-mistral-chat-prompt"
+            style_class: "local-mistral-chat-prompt",
+            width: PROMPT_CONTENT_WIDTH
         });
         this.prompt.clutter_text.set_single_line_mode(false);
         this.prompt.clutter_text.connect("key-press-event", Lang.bind(this, this._onPromptKeyPress));
 
         let controls = new St.BoxLayout({
-            style_class: "local-mistral-chat-controls"
+            style_class: "local-mistral-chat-controls",
+            width: POPUP_CONTENT_WIDTH
         });
 
         this.sendButton = new St.Button({
@@ -194,7 +190,6 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.serverUrl = this._cleanServerUrl(this.serverUrl);
         this.modelName = (this.modelName || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
         this.model = this.modelName;
-        this._updateModelButton();
         this._loadModels();
     }
 
@@ -232,8 +227,6 @@ class LocalMistralChatApplet extends Applet.TextApplet {
                     this.modelName = this.model;
                     this.settings.setValue("model-name", this.model);
                 }
-                this._renderModelSelector();
-                this._updateModelButton();
                 this.statusLabel.set_text(names.length
                     ? "Connected to Ollama (" + names.length + " model" + (names.length === 1 ? "" : "s") + ", using " + this.model + ")"
                     : "Connected to Ollama");
@@ -255,59 +248,6 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         }
 
         this.settings.setOptions("model-name", options);
-    }
-
-    _toggleModelSelector() {
-        this.modelSelectorOpen = !this.modelSelectorOpen;
-        this._renderModelSelector();
-    }
-
-    _updateModelButton() {
-        if (this.modelButton) {
-            this.modelButton.label = "Model: " + (this.model || this.modelName || DEFAULT_MODEL);
-        }
-    }
-
-    _renderModelSelector() {
-        if (!this.modelList) {
-            return;
-        }
-
-        this.modelList.destroy_all_children();
-        this.modelList.visible = this.modelSelectorOpen;
-
-        if (!this.modelSelectorOpen) {
-            return;
-        }
-
-        let names = this.modelNames.slice();
-        if (!names.length) {
-            this.modelList.add_actor(new St.Label({
-                text: "No Ollama models found",
-                style_class: "local-mistral-chat-model-empty"
-            }));
-            return;
-        }
-
-        for (let i = 0; i < names.length; i++) {
-            let name = names[i];
-            let selected = name === this.model;
-            let button = new St.Button({
-                label: (selected ? "✓ " : "") + name,
-                style_class: "local-mistral-chat-model-option" + (selected ? " local-mistral-chat-model-option-selected" : ""),
-                can_focus: true
-            });
-            button.connect("clicked", Lang.bind(this, function() {
-                this.modelName = name;
-                this.model = name;
-                this.settings.setValue("model-name", name);
-                this.modelSelectorOpen = false;
-                this._updateModelButton();
-                this._renderModelSelector();
-                this.statusLabel.set_text("Connected to Ollama (" + this.modelNames.length + " model" + (this.modelNames.length === 1 ? "" : "s") + ", using " + this.model + ")");
-            }));
-            this.modelList.add_actor(button);
-        }
     }
 
     _resolveModelName(preferred, names) {
@@ -491,7 +431,8 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         if (!this.messages.length) {
             this.thread.add_actor(new St.Label({
                 text: "Ask a question to start a quick chat.",
-                style_class: "local-mistral-chat-empty"
+                style_class: "local-mistral-chat-empty",
+                width: MESSAGE_CONTENT_WIDTH
             }));
             return;
         }
@@ -510,7 +451,8 @@ class LocalMistralChatApplet extends Applet.TextApplet {
     _messageActor(message) {
         let item = new St.BoxLayout({
             vertical: true,
-            style_class: "local-mistral-chat-message"
+            style_class: "local-mistral-chat-message",
+            width: MESSAGE_CONTENT_WIDTH
         });
 
         item.add_actor(new St.Label({
@@ -520,7 +462,8 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
         let bubble = new St.Label({
             text: message.content || "...",
-            style_class: "local-mistral-chat-bubble" + (message.role === "user" ? " local-mistral-chat-bubble-user" : "")
+            style_class: "local-mistral-chat-bubble" + (message.role === "user" ? " local-mistral-chat-bubble-user" : ""),
+            width: MESSAGE_CONTENT_WIDTH
         });
         bubble.clutter_text.line_wrap = true;
         bubble.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
