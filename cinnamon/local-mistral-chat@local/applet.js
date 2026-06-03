@@ -18,6 +18,46 @@ const POPUP_CONTENT_WIDTH = 406;
 const MESSAGE_CONTENT_WIDTH = 386;
 const PROMPT_CONTENT_WIDTH = 384;
 
+class PersistentPopupMenuManager extends PopupMenu.PopupMenuManager {
+    _onKeyFocusChanged() {
+        if (!this.grabbed || !this._activeMenu) {
+            return;
+        }
+
+        let focus = global.stage.key_focus;
+        if (focus && this._activeMenuContains(focus)) {
+            return;
+        }
+    }
+
+    _onEventCapture(actor, event) {
+        if (!this.grabbed) {
+            return Clutter.EVENT_PROPAGATE;
+        }
+
+        let activeMenuContains = this._eventIsOnActiveMenu(event);
+        let eventType = event.type();
+
+        if (!activeMenuContains && eventType === Clutter.EventType.BUTTON_PRESS) {
+            this._ungrab();
+            return Clutter.EVENT_PROPAGATE;
+        }
+
+        return super._onEventCapture(actor, event);
+    }
+
+    ensureInputGrab() {
+        if (this.grabbed || !this._activeMenu) {
+            return;
+        }
+
+        this._preGrabInputMode = global.stage_input_mode;
+        this._grabbedFromKeynav = false;
+        this._grab();
+        this._activeMenu.actor.grab_key_focus();
+    }
+}
+
 class LocalMistralChatApplet extends Applet.TextApplet {
     constructor(metadata, orientation, panelHeight, instanceId) {
         super(orientation, panelHeight, instanceId);
@@ -40,7 +80,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.httpSession.timeout = 300;
         this.httpSession.idle_timeout = 300;
 
-        this.menuManager = new PopupMenu.PopupMenuManager(this, false);
+        this.menuManager = new PersistentPopupMenuManager(this);
         this.menu = new Applet.AppletPopupMenu(this, orientation);
         this.menu.setCustomStyleClass("local-mistral-chat-popup");
         this.menuManager.addMenu(this.menu);
@@ -117,6 +157,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         });
         this.prompt.clutter_text.set_single_line_mode(false);
         this.prompt.clutter_text.connect("key-press-event", Lang.bind(this, this._onPromptKeyPress));
+        this.prompt.clutter_text.connect("button-press-event", Lang.bind(this, this._onPromptButtonPress));
 
         let controls = new St.BoxLayout({
             style_class: "local-mistral-chat-controls",
@@ -174,6 +215,12 @@ class LocalMistralChatApplet extends Applet.TextApplet {
             this._sendPrompt();
             return Clutter.EVENT_STOP;
         }
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    _onPromptButtonPress() {
+        this.menuManager.ensureInputGrab();
+        this._focusPrompt();
         return Clutter.EVENT_PROPAGATE;
     }
 
