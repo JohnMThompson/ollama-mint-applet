@@ -40,7 +40,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.httpSession.timeout = 300;
         this.httpSession.idle_timeout = 300;
 
-        this.menuManager = new PopupMenu.PopupMenuManager(this);
+        this.menuManager = new PopupMenu.PopupMenuManager(this, false);
         this.menu = new Applet.AppletPopupMenu(this, orientation);
         this.menu.setCustomStyleClass("local-mistral-chat-popup");
         this.menuManager.addMenu(this.menu);
@@ -416,7 +416,6 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     _openFullChat() {
         Util.spawnCommandLine("xdg-open " + this.serverUrl);
-        this.menu.close();
     }
 
     _setGenerating(isGenerating) {
