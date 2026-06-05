@@ -18,6 +18,8 @@ const DEFAULT_MODEL = "mistral";
 const POPUP_CONTENT_WIDTH = 406;
 const MESSAGE_CONTENT_WIDTH = 386;
 const PROMPT_CONTENT_WIDTH = 384;
+const PROMPT_MIN_HEIGHT = 54;
+const PROMPT_MAX_HEIGHT = 112;
 
 class PersistentPopupMenuManager extends PopupMenu.PopupMenuManager {
     _onKeyFocusChanged() {
@@ -127,7 +129,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         });
 
         this.titleLabel = new St.Label({
-            text: "Local Mistral Chat",
+            text: "Local LLM Chat",
             style_class: "local-mistral-chat-title",
             width: POPUP_CONTENT_WIDTH
         });
@@ -163,8 +165,14 @@ class LocalMistralChatApplet extends Applet.TextApplet {
             width: PROMPT_CONTENT_WIDTH
         });
         this.prompt.clutter_text.set_single_line_mode(false);
+        this.prompt.clutter_text.set_line_wrap(true);
+        this.prompt.clutter_text.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);
+        this.prompt.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        this.prompt.set_clip_to_allocation(true);
+        this.prompt.clutter_text.connect("text-changed", Lang.bind(this, this._resizePrompt));
         this.prompt.clutter_text.connect("key-press-event", Lang.bind(this, this._onPromptKeyPress));
         this.prompt.clutter_text.connect("button-press-event", Lang.bind(this, this._onPromptButtonPress));
+        this._resizePrompt();
 
         let controls = new St.BoxLayout({
             style_class: "local-mistral-chat-controls",
@@ -229,6 +237,12 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.menuManager.ensureInputGrab();
         this._focusPrompt();
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    _resizePrompt() {
+        let textWidth = PROMPT_CONTENT_WIDTH - 20;
+        let preferredHeight = this.prompt.clutter_text.get_preferred_height(textWidth)[1] + 18;
+        this.prompt.set_height(Math.max(PROMPT_MIN_HEIGHT, Math.min(PROMPT_MAX_HEIGHT, preferredHeight)));
     }
 
     _focusPrompt() {
@@ -469,7 +483,40 @@ class LocalMistralChatApplet extends Applet.TextApplet {
     }
 
     _openFullChat() {
-        Util.spawnCommandLine("xdg-open " + this.serverUrl);
+        let messages = this.messages.filter(function(message) {
+            return !!message.content;
+        }).map(function(message) {
+            return { role: message.role, content: message.content };
+        });
+
+        if (!messages.length) {
+            this._openUrl(this.serverUrl);
+            return;
+        }
+
+        let payload = {
+            model: this.model || this.modelName || DEFAULT_MODEL,
+            messages: messages
+        };
+        this._request("POST", this.serverUrl + "/api/handoffs", JSON.stringify(payload), Lang.bind(this, function(status, body) {
+            if (status >= 200 && status < 300) {
+                try {
+                    let data = JSON.parse(body);
+                    if (data.path) {
+                        this._openUrl(this.serverUrl + data.path);
+                        return;
+                    }
+                } catch (e) {
+                    // Fall through and open the web UI without a handoff.
+                }
+            }
+            this.statusLabel.set_text("Unable to transfer chat; opened full chat without history");
+            this._openUrl(this.serverUrl);
+        }));
+    }
+
+    _openUrl(url) {
+        Util.spawn(["xdg-open", url]);
     }
 
     _setGenerating(isGenerating) {

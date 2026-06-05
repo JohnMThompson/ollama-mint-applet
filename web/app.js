@@ -29,6 +29,7 @@ init();
 
 async function init() {
   bindEvents();
+  await importChatHandoff();
   render();
   await loadModels();
 }
@@ -83,6 +84,52 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function importChatHandoff() {
+  const url = new URL(window.location.href);
+  const handoffId = url.searchParams.get("handoff");
+  if (!handoffId) return;
+
+  url.searchParams.delete("handoff");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+
+  const existingChat = state.chats.find((chat) => chat.sourceHandoffId === handoffId);
+  if (existingChat) {
+    state.activeChatId = existingChat.id;
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/handoffs/${encodeURIComponent(handoffId)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to transfer popup chat");
+
+    const messages = (data.messages || [])
+      .filter((message) => ["user", "assistant"].includes(message.role) && typeof message.content === "string")
+      .map((message) => ({ ...message, createdAt: Date.now() }));
+    if (!messages.length) throw new Error("Transferred chat has no messages");
+
+    const firstUserMessage = messages.find((message) => message.role === "user")?.content || "";
+    const now = Date.now();
+    const chat = {
+      id: crypto.randomUUID(),
+      sourceHandoffId: handoffId,
+      title: makeFallbackTitle(firstUserMessage),
+      createdAt: now,
+      updatedAt: now,
+      messages,
+      settings: {
+        ...defaultSettings(),
+        model: data.model || "mistral",
+      },
+    };
+    state.chats.unshift(chat);
+    state.activeChatId = chat.id;
+    saveState();
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 async function loadModels() {

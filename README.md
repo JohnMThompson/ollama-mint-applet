@@ -158,6 +158,12 @@ ollama pull llama3.2
 
 The full browser UI has its own model selector. The applet preference only controls the Cinnamon popup.
 
+### Continue a Popup Chat in the Browser
+
+Click **Open Full Chat** to transfer the popup's current conversation into a new saved browser chat. The browser opens with the transferred chat selected, preserving its messages and model so you can continue the conversation with the full web interface.
+
+The transfer is held briefly by the local server and is only available on the local machine. Opening the full chat with an empty popup continues to open the browser normally.
+
 ## Service Commands
 
 Check the local chat service:
