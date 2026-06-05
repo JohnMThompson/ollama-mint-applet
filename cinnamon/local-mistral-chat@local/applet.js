@@ -4,6 +4,7 @@ const Clutter = imports.gi.Clutter;
 const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const Lang = imports.lang;
+const Main = imports.ui.main;
 const Pango = imports.gi.Pango;
 const PopupMenu = imports.ui.popupMenu;
 const Settings = imports.ui.settings;
@@ -84,6 +85,11 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.menu = new Applet.AppletPopupMenu(this, orientation);
         this.menu.setCustomStyleClass("local-mistral-chat-popup");
         this.menuManager.addMenu(this.menu);
+        // Keep the persistent popup clickable after its modal grab is released.
+        Main.layoutManager.addChrome(this.menu.actor, {
+            affectsInputRegion: true,
+            doNotAdd: true
+        });
 
         this.settings = new Settings.AppletSettings(this, metadata.uuid, instanceId);
         this.settings.bind("server-url", "serverUrl");
@@ -105,6 +111,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     on_applet_removed_from_panel() {
         this._cancelActiveRequest();
+        Main.layoutManager.untrackChrome(this.menu.actor);
         this.settings.finalize();
     }
 
