@@ -277,7 +277,7 @@ function renderMessages() {
   if (!chat || chat.messages.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.innerHTML = "<div><h1>Local Mistral Chat</h1><p>Ask a question, draft something, or continue a saved conversation.</p></div>";
+    empty.innerHTML = "<div><h1>Local LLM Chat</h1><p>Ask a question, draft something, or continue a saved conversation.</p></div>";
     els.messages.replaceChildren(empty);
     return;
   }

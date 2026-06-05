@@ -76,7 +76,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.isGenerating = false;
 
         this.set_applet_label("✨");
-        this.set_applet_tooltip("Local Mistral Chat");
+        this.set_applet_tooltip("Local LLM Chat");
 
         this.httpSession = new Soup.Session();
         this.usesSoup3 = typeof this.httpSession.send_and_read_async === "function";

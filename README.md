@@ -111,13 +111,15 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=mistral PORT=3000 python3 ap
 
 ## Install the Linux Mint Cinnamon Applet
 
-The Cinnamon applet installs as `local-mistral-chat@local` and displays a `✨` panel icon. It opens a compact native popup for quick questions. The full browser UI remains available for saved chat history.
+The Cinnamon applet is named **Local LLM Chat** and displays a `✨` panel icon. It keeps the legacy `local-mistral-chat@local` UUID so existing installations continue to update in place. It opens a compact native popup for quick questions. The full browser UI remains available for saved chat history.
 
 Run:
 
 ```bash
 bash scripts/install-cinnamon-applet.sh
 ```
+
+Rerun this command after updating an existing checkout so Cinnamon receives the latest applet metadata and code.
 
 The installer:
 
@@ -130,10 +132,10 @@ Then add the applet from Cinnamon:
 
 1. Right-click the panel.
 2. Open **Applets**.
-3. Find **Local Mistral Chat**.
+3. Find **Local LLM Chat**.
 4. Add it to the panel.
 
-If Cinnamon already has the applet listed but it does not appear, restart Cinnamon or log out and back in.
+After installation, close and reopen Cinnamon's Applets window to refresh the displayed name. If the applet still does not appear, restart Cinnamon or log out and back in.
 
 ### Configure the Applet Model
 

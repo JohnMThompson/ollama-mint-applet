@@ -1,5 +1,5 @@
 [Unit]
-Description=Local Mistral Chat Interface
+Description=Local LLM Chat Interface
 After=default.target
 
 [Service]
