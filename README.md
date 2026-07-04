@@ -1,13 +1,13 @@
 # Linux Mint Local LLM Applet
 
-A small, dependency-free chat interface for an Ollama models.
+A small, dependency-free chat interface for Ollama models.
 
 The project includes:
 
 - A browser chat UI served by `python3 app.py`
 - A local Python proxy for Ollama's chat API
 - An optional Linux Mint Cinnamon panel applet that opens a quick chat popup
-- A user `systemd` service installer for autostarting the local chat server
+- A Debian package that installs the complete application and user service
 
 ## Screenshots
 
@@ -23,19 +23,10 @@ The project includes:
 
 - Linux with Python 3.10 or newer
 - Ollama installed and running
-- The `mistral` model pulled into Ollama
+- At least one model pulled into Ollama
 - Linux Mint Cinnamon 6.x if you want the panel applet
 
 No Python packages or Node packages are required.
-
-## Get the Code
-
-Clone or download this repository, then enter the project directory:
-
-```bash
-git clone <repo-url>
-cd llm-interface
-```
 
 ## Install Ollama and Mistral
 
@@ -79,18 +70,77 @@ Official references:
 - Ollama Linux install: <https://docs.ollama.com/linux>
 - Mistral model page: <https://ollama.com/library/mistral>
 
-## Run the Browser UI
+## Install the Debian Package
 
-From this repo:
+On Linux Mint or another Debian-based distribution, download the package from the [latest GitHub release](https://github.com/JohnMThompson/ollama-mint-applet/releases/latest) and install it:
+
+```bash
+curl -LO https://github.com/JohnMThompson/ollama-mint-applet/releases/download/v0.1.0/local-llm-chat_0.1.0_all.deb
+sudo apt install ./local-llm-chat_0.1.0_all.deb
+systemctl --user daemon-reload
+systemctl --user enable --now llm-interface.service
+```
+
+The package installs the server and web UI under `/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and the user service under `/usr/lib/systemd/user`. The service is enabled automatically for future login sessions; the final two commands make it available immediately without logging out.
+
+Add the applet after installation:
+
+1. Right-click the Cinnamon panel and open **Applets**.
+2. Find **Local LLM Chat**.
+3. Add it to the panel.
+
+The browser interface is available at <http://127.0.0.1:17865>.
+
+### Upgrade from the Legacy Installer
+
+If you previously installed from source with `scripts/install-cinnamon-applet.sh`, first remove **Local LLM Chat** from the Cinnamon panel. Then remove the user-local copies so they do not override packaged files:
+
+```bash
+systemctl --user disable --now llm-interface.service
+rm -f ~/.config/systemd/user/llm-interface.service
+rm -rf ~/.local/share/cinnamon/applets/local-mistral-chat@local
+systemctl --user daemon-reload
+```
+
+Install the release package normally after completing this cleanup.
+
+### Uninstall the Package
+
+Remove the applet from the Cinnamon panel, then run:
+
+```bash
+systemctl --user disable --now llm-interface.service
+sudo apt remove local-llm-chat
+```
+
+## Install from Source
+
+Source installation is intended for development. Clone the repository and run the installer:
+
+```bash
+git clone https://github.com/JohnMThompson/ollama-mint-applet.git
+cd ollama-mint-applet
+bash scripts/install-cinnamon-applet.sh
+```
+
+This copies the applet and service into your home directory and keeps the service tied to the checkout. Rerun the installer after source changes.
+
+Build a Debian package from source with:
+
+```bash
+./scripts/build-deb.sh
+```
+
+Pass a version argument to override the version from the applet metadata:
+
+```bash
+./scripts/build-deb.sh 0.1.1
+```
+
+## Run the Browser UI from Source
 
 ```bash
 python3 app.py
-```
-
-Open:
-
-```text
-http://127.0.0.1:17865
 ```
 
 The browser UI stores chat history and per-chat settings in browser local storage.
@@ -103,73 +153,11 @@ The server defaults to:
 - Model: `mistral`
 - UI port: `17865`
 
-Override them with environment variables:
+Override them when running from source:
 
 ```bash
 OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=mistral PORT=17865 python3 app.py
 ```
-
-## Install the Debian Package
-
-On Linux Mint or another Debian-based distribution, build and install the complete application with:
-
-```bash
-./scripts/build-deb.sh
-sudo apt install ./dist/local-llm-chat_0.1.0_all.deb
-systemctl --user daemon-reload
-systemctl --user enable --now llm-interface.service
-```
-
-The package installs the server and web UI under `/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and the user service under `/usr/lib/systemd/user`. Add **Local LLM Chat** from Cinnamon's Applets window after installation. The service is enabled globally for future login sessions; the final two commands start it immediately in the current session.
-
-If you previously used `scripts/install-cinnamon-applet.sh`, remove its user-local copies before installing the package so they do not override packaged files:
-
-```bash
-systemctl --user disable --now llm-interface.service
-rm -f ~/.config/systemd/user/llm-interface.service
-rm -rf ~/.local/share/cinnamon/applets/local-mistral-chat@local
-systemctl --user daemon-reload
-```
-
-Build a package with an explicit version when needed:
-
-```bash
-./scripts/build-deb.sh 1.1.1
-```
-
-Remove the package with:
-
-```bash
-sudo apt remove local-llm-chat
-```
-
-## Install the Linux Mint Cinnamon Applet
-
-The Cinnamon applet is named **Local LLM Chat** and displays a `✨` panel icon. It keeps the legacy `local-mistral-chat@local` UUID so existing installations continue to update in place. It opens a compact native popup for quick questions. The full browser UI remains available for saved chat history.
-
-Run:
-
-```bash
-bash scripts/install-cinnamon-applet.sh
-```
-
-Rerun this command after updating an existing checkout so Cinnamon receives the latest applet metadata and code.
-
-The installer:
-
-- Copies the applet to `~/.local/share/cinnamon/applets/local-mistral-chat@local`
-- Creates `~/.config/systemd/user/llm-interface.service`
-- Enables and starts the user service
-- Keeps the service tied to the current repo path
-
-Then add the applet from Cinnamon:
-
-1. Right-click the panel.
-2. Open **Applets**.
-3. Find **Local LLM Chat**.
-4. Add it to the panel.
-
-After installation, close and reopen Cinnamon's Applets window to refresh the displayed name. If the applet still does not appear, restart Cinnamon or log out and back in.
 
 ### Configure the Applet Model
 
