@@ -90,7 +90,7 @@ python3 app.py
 Open:
 
 ```text
-http://127.0.0.1:3000
+http://127.0.0.1:17865
 ```
 
 The browser UI stores chat history and per-chat settings in browser local storage.
@@ -101,12 +101,46 @@ The server defaults to:
 
 - Ollama URL: `http://127.0.0.1:11434`
 - Model: `mistral`
-- UI port: `3000`
+- UI port: `17865`
 
 Override them with environment variables:
 
 ```bash
-OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=mistral PORT=3000 python3 app.py
+OLLAMA_BASE_URL=http://127.0.0.1:11434 OLLAMA_MODEL=mistral PORT=17865 python3 app.py
+```
+
+## Install the Debian Package
+
+On Linux Mint or another Debian-based distribution, build and install the complete application with:
+
+```bash
+./scripts/build-deb.sh
+sudo apt install ./dist/local-llm-chat_0.1.0_all.deb
+systemctl --user daemon-reload
+systemctl --user enable --now llm-interface.service
+```
+
+The package installs the server and web UI under `/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and the user service under `/usr/lib/systemd/user`. Add **Local LLM Chat** from Cinnamon's Applets window after installation. The service is enabled globally for future login sessions; the final two commands start it immediately in the current session.
+
+If you previously used `scripts/install-cinnamon-applet.sh`, remove its user-local copies before installing the package so they do not override packaged files:
+
+```bash
+systemctl --user disable --now llm-interface.service
+rm -f ~/.config/systemd/user/llm-interface.service
+rm -rf ~/.local/share/cinnamon/applets/local-mistral-chat@local
+systemctl --user daemon-reload
+```
+
+Build a package with an explicit version when needed:
+
+```bash
+./scripts/build-deb.sh 1.1.1
+```
+
+Remove the package with:
+
+```bash
+sudo apt remove local-llm-chat
 ```
 
 ## Install the Linux Mint Cinnamon Applet
@@ -143,7 +177,7 @@ The applet detects installed Ollama models from the local server and shows them 
 
 The same model list is also available in the applet's Cinnamon preferences:
 
-- Local chat server URL, default `http://127.0.0.1:3000`
+- Local chat server URL, default `http://127.0.0.1:17865`
 - Ollama model, default `mistral`
 
 To change the applet model:
@@ -205,7 +239,7 @@ curl http://127.0.0.1:11434/api/tags
 Check that this app's server is running:
 
 ```bash
-curl http://127.0.0.1:3000/api/config
+curl http://127.0.0.1:17865/api/config
 ```
 
 Check Cinnamon applet logs:
@@ -220,10 +254,10 @@ Search only for this applet:
 grep -Ei "local-mistral-chat|lookingglass|error" ~/.xsession-errors
 ```
 
-If port `3000` is already in use, either stop the other process or run this app with another port:
+If port `17865` is already in use, either stop the other process or run this app with another port:
 
 ```bash
-PORT=3001 python3 app.py
+PORT=17866 python3 app.py
 ```
 
 If you change the port for the service, update both:

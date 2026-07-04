@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-port="${PORT:-3000}"
+port="${PORT:-17865}"
 health_url="http://127.0.0.1:${port}/api/config"
 
 if /usr/bin/python3 - "${health_url}" <<'PY'

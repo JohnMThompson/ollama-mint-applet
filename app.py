@@ -264,7 +264,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    port = int(os.environ.get("PORT", "3000"))
+    port = int(os.environ.get("PORT", "17865"))
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"Serving chat UI at http://127.0.0.1:{port}")
     print(f"Proxying Ollama at {OLLAMA_BASE_URL} with default model {DEFAULT_MODEL}")

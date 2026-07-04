@@ -13,7 +13,8 @@ const Soup = imports.gi.Soup;
 const St = imports.gi.St;
 const Util = imports.misc.util;
 
-const DEFAULT_SERVER_URL = "http://127.0.0.1:3000";
+const DEFAULT_SERVER_URL = "http://127.0.0.1:17865";
+const LEGACY_SERVER_URL = "http://127.0.0.1:3000";
 const DEFAULT_MODEL = "mistral";
 const POPUP_CONTENT_WIDTH = 406;
 const MESSAGE_CONTENT_WIDTH = 386;
@@ -282,6 +283,10 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     _onSettingsChanged() {
         this.serverUrl = this._cleanServerUrl(this.serverUrl);
+        if (this.serverUrl === LEGACY_SERVER_URL) {
+            this.serverUrl = DEFAULT_SERVER_URL;
+            this.settings.setValue("server-url", this.serverUrl);
+        }
         this.modelName = (this.modelName || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
         this.model = this.modelName;
         this._loadModels();

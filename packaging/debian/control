@@ -1,0 +1,11 @@
+Package: local-llm-chat
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3
+Recommends: cinnamon, ollama
+Maintainer: JohnMThompson <johnmichaelthomp@gmail.com>
+Description: Local Ollama chat interface and Cinnamon applet
+ A browser chat interface and Cinnamon panel applet for locally installed
+ Ollama models. Includes a user systemd service for the local web server.
