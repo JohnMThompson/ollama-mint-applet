@@ -15,9 +15,80 @@ ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 DEFAULT_MODEL = os.environ.get("OLLAMA_MODEL", "mistral")
+OLLAMA_LOAD_KEEP_ALIVE = os.environ.get("OLLAMA_LOAD_KEEP_ALIVE", "-1")
+try:
+    OLLAMA_LOAD_KEEP_ALIVE = int(OLLAMA_LOAD_KEEP_ALIVE)
+except ValueError:
+    pass
 HANDOFF_TTL_SECONDS = 10 * 60
 HANDOFFS = {}
 HANDOFFS_LOCK = threading.Lock()
+
+
+class OllamaError(Exception):
+    pass
+
+
+def ollama_json(path, payload=None, timeout=30):
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        f"{OLLAMA_BASE_URL}{path}",
+        data=data,
+        headers={"Content-Type": "application/json"} if data is not None else {},
+        method="POST" if data is not None else "GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            message = body.get("error") or str(exc)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            message = str(exc)
+        raise OllamaError(message) from exc
+
+
+def get_model_status():
+    tags = ollama_json("/api/tags", timeout=10)
+    running = ollama_json("/api/ps", timeout=10)
+    running_names = [
+        model.get("name", "")
+        for model in running.get("models", [])
+        if model.get("name")
+    ]
+    models = [
+        {
+            "name": model.get("name", ""),
+            "modified_at": model.get("modified_at", ""),
+            "running": model.get("name", "") in running_names,
+        }
+        for model in tags.get("models", [])
+        if model.get("name")
+    ]
+    return {
+        "models": models,
+        "runningModels": running_names,
+        "activeModel": running_names[0] if running_names else None,
+        "defaultModel": DEFAULT_MODEL,
+    }
+
+
+def load_ollama_model(model_name):
+    status = get_model_status()
+    downloaded_names = [model["name"] for model in status["models"]]
+    if model_name not in downloaded_names:
+        raise ValueError("Model is not downloaded")
+    ollama_json(
+        "/api/generate",
+        {
+            "model": model_name,
+            "keep_alive": OLLAMA_LOAD_KEEP_ALIVE,
+            "stream": False,
+        },
+        timeout=300,
+    )
+    return get_model_status()
 
 
 def create_handoff(payload):
@@ -97,6 +168,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/chat":
             return self.proxy_chat()
+        if path == "/api/models/load":
+            return self.load_model()
         if path == "/api/handoffs":
             return self.create_chat_handoff()
         self.send_error(404, "Not found")
@@ -117,15 +190,24 @@ class Handler(SimpleHTTPRequestHandler):
 
     def proxy_models(self):
         try:
-            with urllib.request.urlopen(f"{OLLAMA_BASE_URL}/api/tags", timeout=10) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            models = [
-                {"name": model.get("name", ""), "modified_at": model.get("modified_at", "")}
-                for model in data.get("models", [])
-            ]
-            return self.send_json({"models": models, "defaultModel": DEFAULT_MODEL})
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return self.send_json(get_model_status())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OllamaError) as exc:
             return self.send_json({"error": f"Unable to reach Ollama at {OLLAMA_BASE_URL}: {exc}"}, 502)
+
+    def load_model(self):
+        try:
+            body = self.read_json_body()
+            model_name = body.get("model")
+            if not isinstance(model_name, str) or not model_name.strip() or len(model_name) > 200:
+                raise ValueError("Invalid model")
+            status = load_ollama_model(model_name.strip())
+            return self.send_json(status)
+        except json.JSONDecodeError:
+            return self.send_json({"error": "Invalid JSON body"}, 400)
+        except ValueError as exc:
+            return self.send_json({"error": str(exc)}, 400)
+        except (urllib.error.URLError, TimeoutError, OllamaError) as exc:
+            return self.send_json({"error": f"Unable to load model: {exc}"}, 502)
 
     def create_chat_handoff(self):
         try:

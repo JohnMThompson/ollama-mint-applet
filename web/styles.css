@@ -443,6 +443,57 @@ button {
   box-shadow: var(--shadow);
 }
 
+.model-dialog {
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.model-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.model-dialog form,
+.model-dialog label {
+  display: grid;
+  gap: 12px;
+}
+
+.model-dialog h2,
+.model-dialog p {
+  margin: 0;
+}
+
+.model-dialog p,
+.model-dialog label {
+  color: var(--muted);
+}
+
+.model-dialog select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dialog-actions .send-button {
+  padding: 9px 14px;
+}
+
+.dialog-error {
+  color: var(--danger) !important;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

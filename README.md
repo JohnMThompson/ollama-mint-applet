@@ -160,6 +160,8 @@ ollama pull llama3.2
 
 The full browser UI has its own model selector. The applet preference only controls the Cinnamon popup.
 
+When either interface opens, it checks Ollama for a running model. A running model is selected automatically. If none is running, the interface lists downloaded models and loads the one you choose. Models loaded this way remain active until Ollama unloads them or stops; change this by setting `OLLAMA_LOAD_KEEP_ALIVE` to another Ollama duration such as `30m`.
+
 ### Continue a Popup Chat in the Browser
 
 Click **Open Full Chat** to transfer the popup's current conversation into a new saved browser chat. The browser opens with the transferred chat selected, preserving its messages and model so you can continue the conversation with the full web interface.

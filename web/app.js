@@ -9,7 +9,12 @@ const els = {
   contextInput: document.querySelector("#contextInput"),
   menuButton: document.querySelector("#menuButton"),
   messages: document.querySelector("#messages"),
+  modelDialog: document.querySelector("#modelDialog"),
+  modelDialogError: document.querySelector("#modelDialogError"),
+  modelDialogForm: document.querySelector("#modelDialogForm"),
   modelSelect: document.querySelector("#modelSelect"),
+  loadModelButton: document.querySelector("#loadModelButton"),
+  loadModelSelect: document.querySelector("#loadModelSelect"),
   newChatButton: document.querySelector("#newChatButton"),
   promptInput: document.querySelector("#promptInput"),
   searchInput: document.querySelector("#searchInput"),
@@ -24,6 +29,7 @@ const els = {
 
 let state = loadState();
 let abortController = null;
+let runningModels = [];
 
 init();
 
@@ -66,6 +72,8 @@ function bindEvents() {
     if (!content || abortController) return;
     await sendMessage(content);
   });
+  els.modelDialog.addEventListener("cancel", (event) => event.preventDefault());
+  els.modelDialogForm.addEventListener("submit", loadSelectedModel);
 
   for (const input of [els.systemPrompt, els.temperatureInput, els.contextInput, els.modelSelect]) {
     input.addEventListener("change", saveCurrentSettings);
@@ -138,7 +146,9 @@ async function loadModels() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Unable to load models");
     const names = data.models.map((model) => model.name).filter(Boolean);
-    const selected = resolveModelName(activeChat()?.settings?.model || data.defaultModel || "mistral", names);
+    runningModels = data.runningModels || [];
+    const preferred = data.activeModel || activeChat()?.settings?.model || data.defaultModel || "mistral";
+    const selected = resolveModelName(preferred, names);
     const uniqueNames = [...new Set([selected, ...names])];
     els.modelSelect.replaceChildren(...uniqueNames.map((name) => new Option(name, name)));
     els.modelSelect.value = selected;
@@ -147,13 +157,71 @@ async function loadModels() {
       chat.settings.model = selected;
       saveState();
     }
-    els.connectionStatus.textContent = names.length ? `Connected to Ollama (${names.length} model${names.length === 1 ? "" : "s"})` : "Connected to Ollama";
+    if (data.activeModel) {
+      els.connectionStatus.textContent = `Using running model ${data.activeModel}`;
+      closeModelDialog();
+    } else {
+      els.connectionStatus.textContent = names.length ? "No model running" : "No downloaded models";
+      showModelDialog(names, selected);
+    }
   } catch (error) {
     const selected = activeChat()?.settings?.model || "mistral";
     els.modelSelect.replaceChildren(new Option(selected, selected));
     els.modelSelect.value = selected;
     els.connectionStatus.textContent = error.message;
     showToast(error.message);
+  }
+}
+
+function showModelDialog(names, preferred) {
+  els.loadModelSelect.replaceChildren(...names.map((name) => new Option(name, name)));
+  els.loadModelSelect.value = resolveModelName(preferred, names);
+  els.loadModelButton.disabled = names.length === 0;
+  els.loadModelButton.textContent = "Load model";
+  els.modelDialogError.hidden = true;
+  els.modelDialogError.textContent = "";
+  if (!els.modelDialog.open) els.modelDialog.showModal();
+}
+
+function closeModelDialog() {
+  if (els.modelDialog.open) els.modelDialog.close();
+}
+
+async function loadSelectedModel(event) {
+  event.preventDefault();
+  const model = els.loadModelSelect.value;
+  if (!model) return;
+
+  els.loadModelButton.disabled = true;
+  els.loadModelButton.textContent = "Loading…";
+  els.modelDialogError.hidden = true;
+  try {
+    const response = await fetch("/api/models/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to load model");
+    runningModels = data.runningModels || [model];
+    selectModel(model);
+    els.connectionStatus.textContent = `Using running model ${model}`;
+    closeModelDialog();
+  } catch (error) {
+    els.modelDialogError.textContent = error.message;
+    els.modelDialogError.hidden = false;
+  } finally {
+    els.loadModelButton.disabled = false;
+    els.loadModelButton.textContent = "Load model";
+  }
+}
+
+function selectModel(model) {
+  els.modelSelect.value = model;
+  const chat = activeChat();
+  if (chat) {
+    chat.settings.model = model;
+    saveState();
   }
 }
 
@@ -326,6 +394,10 @@ function renderMessage(message) {
 }
 
 async function sendMessage(content) {
+  if (!runningModels.length) {
+    await loadModels();
+    if (!runningModels.length) return;
+  }
   const chat = ensureActiveChat();
   const userMessage = { role: "user", content, createdAt: Date.now() };
   const assistantMessage = { role: "assistant", content: "", createdAt: Date.now() };

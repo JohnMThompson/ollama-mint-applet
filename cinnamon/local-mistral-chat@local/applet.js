@@ -74,6 +74,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.activeMessage = null;
         this.activeRequest = null;
         this.isGenerating = false;
+        this.isLoadingModel = false;
 
         this.set_applet_label("✨");
         this.set_applet_tooltip("Local LLM Chat");
@@ -142,6 +143,30 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.statusLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         header.add_actor(this.titleLabel);
         header.add_actor(this.statusLabel);
+
+        this.modelChooser = new St.BoxLayout({
+            vertical: true,
+            visible: false,
+            style_class: "local-mistral-chat-model-dialog",
+            width: POPUP_CONTENT_WIDTH
+        });
+        this.modelChooser.add_actor(new St.Label({
+            text: "Load an Ollama model",
+            style_class: "local-mistral-chat-model-dialog-title"
+        }));
+        let chooserDescription = new St.Label({
+            text: "No model is currently running. Select a downloaded model to load before chatting.",
+            style_class: "local-mistral-chat-model-dialog-description",
+            width: MESSAGE_CONTENT_WIDTH
+        });
+        chooserDescription.clutter_text.line_wrap = true;
+        chooserDescription.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        this.modelChooser.add_actor(chooserDescription);
+        this.modelChoices = new St.BoxLayout({
+            vertical: true,
+            style_class: "local-mistral-chat-model-choices"
+        });
+        this.modelChooser.add_actor(this.modelChoices);
 
         this.scrollView = new St.ScrollView({
             style_class: "local-mistral-chat-scroll",
@@ -214,6 +239,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         controls.add_actor(this.openButton);
 
         this.root.add_actor(header);
+        this.root.add_actor(this.modelChooser);
         this.root.add_actor(this.scrollView);
         this.root.add_actor(this.prompt);
         this.root.add_actor(controls);
@@ -289,18 +315,96 @@ class LocalMistralChatApplet extends Applet.TextApplet {
                     return !!name;
                 });
                 this.modelNames = names;
-                this.model = this._resolveModelName(this.modelName || data.defaultModel || DEFAULT_MODEL, names);
+                if (data.activeModel) {
+                    this.model = data.activeModel;
+                } else {
+                    this.model = this._resolveModelName(this.modelName || data.defaultModel || DEFAULT_MODEL, names);
+                }
                 this._syncModelOptions();
-                if (names.length && this.model !== this.modelName) {
+                if (data.activeModel && this.model !== this.modelName) {
                     this.modelName = this.model;
                     this.settings.setValue("model-name", this.model);
                 }
-                this.statusLabel.set_text(names.length
-                    ? "Connected to Ollama (" + names.length + " model" + (names.length === 1 ? "" : "s") + ", using " + this.model + ")"
-                    : "Connected to Ollama");
+                if (data.activeModel) {
+                    this._hideModelChooser();
+                    this.statusLabel.set_text("Using running model " + data.activeModel);
+                } else {
+                    this.statusLabel.set_text(names.length ? "No model running" : "No downloaded models");
+                    this._showModelChooser(names);
+                }
             } catch (e) {
                 this.statusLabel.set_text("Invalid response from local server");
             }
+        }));
+    }
+
+    _showModelChooser(names) {
+        this.modelChoices.destroy_all_children();
+        if (!names.length) {
+            this.modelChoices.add_actor(new St.Label({
+                text: "No downloaded models are available.",
+                style_class: "local-mistral-chat-model-dialog-description"
+            }));
+        }
+        for (let i = 0; i < names.length; i++) {
+            let modelName = names[i];
+            let button = new St.Button({
+                label: modelName,
+                style_class: "local-mistral-chat-button local-mistral-chat-model-choice",
+                can_focus: true
+            });
+            button.connect("clicked", Lang.bind(this, function() {
+                this._loadModel(modelName);
+            }));
+            this.modelChoices.add_actor(button);
+        }
+        this.modelChooser.visible = true;
+        this.scrollView.visible = false;
+        this.prompt.visible = false;
+        this.sendButton.reactive = false;
+    }
+
+    _hideModelChooser() {
+        this.isLoadingModel = false;
+        this.modelChooser.visible = false;
+        this.scrollView.visible = true;
+        this.prompt.visible = true;
+        this.sendButton.reactive = !this.isGenerating;
+    }
+
+    _loadModel(modelName) {
+        if (this.isLoadingModel) {
+            return;
+        }
+        this.isLoadingModel = true;
+        this.statusLabel.set_text("Loading " + modelName + "...");
+        let buttons = this.modelChoices.get_children();
+        for (let i = 0; i < buttons.length; i++) {
+            if (buttons[i] instanceof St.Button) {
+                buttons[i].reactive = false;
+            }
+        }
+        this._request("POST", this.serverUrl + "/api/models/load", JSON.stringify({
+            model: modelName
+        }), Lang.bind(this, function(status, body) {
+            this.isLoadingModel = false;
+            if (status < 200 || status >= 300) {
+                let error = "Unable to load " + modelName;
+                try {
+                    error = JSON.parse(body).error || error;
+                } catch (e) {
+                    // Use the generic error.
+                }
+                this.statusLabel.set_text(error);
+                this._showModelChooser(this.modelNames);
+                return;
+            }
+            this.model = modelName;
+            this.modelName = modelName;
+            this.settings.setValue("model-name", modelName);
+            this._hideModelChooser();
+            this.statusLabel.set_text("Using running model " + modelName);
+            this._focusPrompt();
         }));
     }
 
@@ -332,7 +436,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
     }
 
     _sendPrompt() {
-        if (this.isGenerating) {
+        if (this.isGenerating || this.modelChooser.visible) {
             return;
         }
 

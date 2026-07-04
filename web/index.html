@@ -60,6 +60,20 @@
         </form>
       </main>
     </div>
-    <script src="/app.js?v=2" type="module"></script>
+    <dialog class="model-dialog" id="modelDialog">
+      <form method="dialog" id="modelDialogForm">
+        <h2>Load an Ollama model</h2>
+        <p>No model is currently running. Select a downloaded model to load before chatting.</p>
+        <label>
+          Downloaded model
+          <select id="loadModelSelect" aria-label="Downloaded model"></select>
+        </label>
+        <p class="dialog-error" id="modelDialogError" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="send-button" id="loadModelButton" type="submit">Load model</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="/app.js?v=3" type="module"></script>
   </body>
 </html>
