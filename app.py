@@ -23,6 +23,7 @@ except ValueError:
 HANDOFF_TTL_SECONDS = 10 * 60
 HANDOFFS = {}
 HANDOFFS_LOCK = threading.Lock()
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
 
 
 class OllamaError(Exception):
@@ -153,6 +154,8 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
+        if not self.validate_request_source():
+            return
         path = urlsplit(self.path).path
         if path == "/api/config":
             return self.send_json({"ollamaBaseUrl": OLLAMA_BASE_URL, "defaultModel": DEFAULT_MODEL})
@@ -165,7 +168,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_error(404, "Not found")
 
     def do_POST(self):
+        if not self.validate_request_source():
+            return
         path = urlsplit(self.path).path
+        if path.startswith("/api/") and self.headers.get_content_type() != "application/json":
+            return self.send_json({"error": "Content-Type must be application/json"}, 415)
         if path == "/api/chat":
             return self.proxy_chat()
         if path == "/api/models/load":
@@ -173,6 +180,44 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/handoffs":
             return self.create_chat_handoff()
         self.send_error(404, "Not found")
+
+    def validate_request_source(self):
+        host_header = self.headers.get("Host", "")
+        try:
+            parsed_host = urlsplit(f"//{host_header}")
+            host = parsed_host.hostname
+            port = parsed_host.port
+        except ValueError:
+            host = None
+            port = None
+        expected_port = self.server.server_address[1]
+        if (
+            host not in LOOPBACK_HOSTS
+            or "@" in host_header
+            or (port is not None and port != expected_port)
+        ):
+            self.send_json({"error": "Invalid Host header"}, 403)
+            return False
+
+        origin = self.headers.get("Origin")
+        if origin:
+            try:
+                parsed_origin = urlsplit(origin)
+                origin_port = parsed_origin.port or (80 if parsed_origin.scheme == "http" else None)
+            except ValueError:
+                parsed_origin = None
+                origin_port = None
+            if (
+                parsed_origin is None
+                or parsed_origin.scheme != "http"
+                or parsed_origin.hostname not in LOOPBACK_HOSTS
+                or origin_port != expected_port
+                or parsed_origin.username is not None
+                or parsed_origin.path not in {"", "/"}
+            ):
+                self.send_json({"error": "Cross-origin request denied"}, 403)
+                return False
+        return True
 
     def send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")

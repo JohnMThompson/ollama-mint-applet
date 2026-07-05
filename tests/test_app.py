@@ -1,8 +1,57 @@
 import time
 import unittest
+from email.message import Message
 from unittest import mock
 
 import app
+
+
+def request_handler(headers):
+    handler = object.__new__(app.Handler)
+    handler.headers = Message()
+    for name, value in headers.items():
+        handler.headers[name] = value
+    handler.server = mock.Mock(server_address=("127.0.0.1", 17865))
+    handler.send_json = mock.Mock()
+    return handler
+
+
+class RequestSourceValidationTests(unittest.TestCase):
+    def test_accepts_local_host_and_same_origin(self):
+        handler = request_handler(
+            {"Host": "127.0.0.1:17865", "Origin": "http://localhost:17865"}
+        )
+
+        self.assertTrue(handler.validate_request_source())
+        handler.send_json.assert_not_called()
+
+    def test_rejects_dns_rebinding_host(self):
+        handler = request_handler({"Host": "attacker.example"})
+
+        self.assertFalse(handler.validate_request_source())
+        handler.send_json.assert_called_once_with({"error": "Invalid Host header"}, 403)
+
+    def test_rejects_cross_origin_browser_request(self):
+        handler = request_handler(
+            {"Host": "localhost:17865", "Origin": "https://attacker.example"}
+        )
+
+        self.assertFalse(handler.validate_request_source())
+        handler.send_json.assert_called_once_with(
+            {"error": "Cross-origin request denied"}, 403
+        )
+
+    def test_post_rejects_simple_content_type(self):
+        handler = request_handler(
+            {"Host": "localhost:17865", "Content-Type": "text/plain"}
+        )
+        handler.path = "/api/chat"
+
+        handler.do_POST()
+
+        handler.send_json.assert_called_once_with(
+            {"error": "Content-Type must be application/json"}, 415
+        )
 
 
 class ChatHandoffTests(unittest.TestCase):
