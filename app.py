@@ -216,12 +216,11 @@ def cleanup_handoffs(now=None):
         return cleanup_handoffs_locked(time.time() if now is None else now)
 
 
-def get_handoff(handoff_id):
+def consume_handoff(handoff_id):
     now = time.time()
     with HANDOFFS_LOCK:
-        handoff = HANDOFFS.get(handoff_id)
+        handoff = HANDOFFS.pop(handoff_id, None)
         if not handoff or now - handoff["createdAt"] > HANDOFF_TTL_SECONDS:
-            HANDOFFS.pop(handoff_id, None)
             return None
         return {
             "model": handoff["model"],
@@ -371,7 +370,7 @@ class Handler(SimpleHTTPRequestHandler):
     def get_chat_handoff(self, handoff_id):
         if not handoff_id or len(handoff_id) > 64:
             return self.send_json({"error": "Invalid chat handoff"}, 400)
-        handoff = get_handoff(handoff_id)
+        handoff = consume_handoff(handoff_id)
         if not handoff:
             return self.send_json({"error": "Chat handoff not found or expired"}, 404)
         return self.send_json(handoff)

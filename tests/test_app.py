@@ -194,7 +194,7 @@ class ChatHandoffTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            app.get_handoff(handoff_id),
+            app.consume_handoff(handoff_id),
             {
                 "model": "mistral:latest",
                 "messages": [
@@ -238,22 +238,39 @@ class ChatHandoffTests(unittest.TestCase):
             "time",
             return_value=time.time() + app.HANDOFF_TTL_SECONDS + 1,
         ):
-            self.assertIsNone(app.get_handoff(handoff_id))
+            self.assertIsNone(app.consume_handoff(handoff_id))
 
         self.assertNotIn(handoff_id, app.HANDOFFS)
 
-    def test_returned_handoff_does_not_mutate_stored_copy(self):
+    def test_handoff_can_only_be_consumed_once(self):
         handoff_id = app.create_handoff(
             {"messages": [{"role": "user", "content": "Original"}]}
         )
 
-        first = app.get_handoff(handoff_id)
-        first["messages"][0]["content"] = "Changed"
+        first = app.consume_handoff(handoff_id)
 
-        self.assertEqual(
-            app.get_handoff(handoff_id)["messages"][0]["content"],
-            "Original",
+        self.assertEqual(first["messages"][0]["content"], "Original")
+        self.assertIsNone(app.consume_handoff(handoff_id))
+
+    def test_concurrent_consumers_only_deliver_handoff_once(self):
+        handoff_id = app.create_handoff(
+            {"messages": [{"role": "user", "content": "One reader"}]}
         )
+        barrier = threading.Barrier(3)
+        results = []
+
+        def consume():
+            barrier.wait()
+            results.append(app.consume_handoff(handoff_id))
+
+        threads = [threading.Thread(target=consume) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(sum(result is not None for result in results), 1)
 
     def test_evicts_oldest_handoff_at_count_limit(self):
         with mock.patch.object(app, "MAX_HANDOFFS", 2), mock.patch.object(
