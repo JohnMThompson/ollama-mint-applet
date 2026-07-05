@@ -322,33 +322,36 @@ class ChatHandoffTests(unittest.TestCase):
 
 
 class StaticAssetHeaderTests(unittest.TestCase):
-    def test_static_assets_disable_browser_cache(self):
+    def response_headers(self, path):
         handler = object.__new__(app.Handler)
-        handler.path = "/app.js?v=2"
+        handler.path = path
         headers = []
         handler.send_header = lambda name, value: headers.append((name, value))
-
-        with mock.patch.object(
-            app.SimpleHTTPRequestHandler,
-            "end_headers",
-        ):
+        with mock.patch.object(app.SimpleHTTPRequestHandler, "end_headers"):
             handler.end_headers()
+        return dict(headers)
 
-        self.assertIn(("Cache-Control", "no-store"), headers)
+    def test_static_assets_disable_browser_cache(self):
+        self.assertEqual(
+            self.response_headers("/app.js?v=2")["Cache-Control"],
+            "no-store",
+        )
 
     def test_api_responses_disable_browser_cache(self):
-        handler = object.__new__(app.Handler)
-        handler.path = "/api/handoffs/example"
-        headers = []
-        handler.send_header = lambda name, value: headers.append((name, value))
+        self.assertEqual(
+            self.response_headers("/api/handoffs/example")["Cache-Control"],
+            "no-store",
+        )
 
-        with mock.patch.object(
-            app.SimpleHTTPRequestHandler,
-            "end_headers",
-        ):
-            handler.end_headers()
+    def test_browser_security_headers_are_restrictive(self):
+        headers = self.response_headers("/")
 
-        self.assertIn(("Cache-Control", "no-store"), headers)
+        self.assertEqual(headers["Content-Security-Policy"], app.CONTENT_SECURITY_POLICY)
+        self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+        self.assertEqual(headers["Referrer-Policy"], "no-referrer")
+        self.assertEqual(headers["X-Frame-Options"], "DENY")
+        self.assertEqual(headers["Cross-Origin-Opener-Policy"], "same-origin")
+        self.assertEqual(headers["Cross-Origin-Resource-Policy"], "same-origin")
 
 
 class ModelStatusTests(unittest.TestCase):

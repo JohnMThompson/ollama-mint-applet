@@ -34,6 +34,17 @@ MAX_REQUEST_BODY_BYTES = {
     "/api/handoffs": 600_000,
     "/api/models/load": 4_000,
 }
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "base-uri 'none'; "
+    "connect-src 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'; "
+    "img-src 'self' data:; "
+    "object-src 'none'; "
+    "script-src 'self'; "
+    "style-src 'self'"
+)
 
 
 class OllamaError(Exception):
@@ -234,6 +245,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
