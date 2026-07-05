@@ -1,5 +1,5 @@
 import { readStream } from "./stream.js";
-import { loadPersistedState, STORAGE_KEY } from "./state.js";
+import { createStatePersistence, loadPersistedState } from "./state.js";
 
 const els = {
   chatList: document.querySelector("#chatList"),
@@ -28,7 +28,16 @@ const els = {
   temperatureInput: document.querySelector("#temperatureInput"),
 };
 
-let state = loadPersistedState(localStorage);
+const persistence = createStatePersistence(localStorage, () => {
+  queueMicrotask(() => {
+    showToast(
+      "Chat history could not be saved. This session remains available in memory; delete chats or use Clear history to free browser storage.",
+    );
+  });
+});
+let state = loadPersistedState(localStorage, {
+  onError: persistence.reportError,
+});
 let abortController = null;
 let runningModels = [];
 
@@ -82,7 +91,7 @@ function bindEvents() {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistence.save(state);
 }
 
 async function importChatHandoff() {

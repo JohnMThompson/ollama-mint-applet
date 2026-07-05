@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createStatePersistence,
   loadPersistedState,
   normalizePersistedState,
   STATE_SCHEMA_VERSION,
@@ -94,4 +95,43 @@ test("replaces non-object state with an empty schema", () => {
     assert.deepEqual(state.chats, []);
     assert.equal(state.activeChatId, null);
   }
+});
+
+
+test("persistence failures do not throw and notify only once", () => {
+  let attempts = 0;
+  const errors = [];
+  const storage = {
+    setItem() {
+      attempts += 1;
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    },
+  };
+  const persistence = createStatePersistence(storage, (error) => errors.push(error));
+
+  assert.equal(persistence.save({ chats: [] }), false);
+  assert.equal(persistence.save({ chats: [{ id: "still-in-memory" }] }), false);
+  assert.equal(attempts, 2);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].name, "QuotaExceededError");
+});
+
+
+test("storage access failure returns usable state and reports once", () => {
+  const errors = [];
+  const storage = {
+    getItem() {
+      throw new DOMException("Blocked", "SecurityError");
+    },
+  };
+  const persistence = createStatePersistence(storage, (error) => errors.push(error));
+
+  const state = loadPersistedState(storage, {
+    onError: persistence.reportError,
+  });
+  persistence.reportError(new Error("second failure"));
+
+  assert.deepEqual(state.chats, []);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].name, "SecurityError");
 });

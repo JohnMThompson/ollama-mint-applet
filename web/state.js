@@ -108,16 +108,43 @@ export function normalizePersistedState(value, options = {}) {
 }
 
 export function loadPersistedState(storage, options = {}) {
+  let serialized;
   try {
-    const serialized = storage.getItem(STORAGE_KEY);
-    if (serialized === null) return emptyState();
+    serialized = storage.getItem(STORAGE_KEY);
+  } catch (error) {
+    options.onError?.(error);
+    return emptyState();
+  }
+  if (serialized === null) return emptyState();
+  try {
     return normalizePersistedState(JSON.parse(serialized), options);
   } catch {
     try {
       storage.removeItem(STORAGE_KEY);
-    } catch {
-      // Storage access may be disabled; the in-memory state can still operate.
+    } catch (error) {
+      options.onError?.(error);
     }
     return emptyState();
   }
+}
+
+export function createStatePersistence(storage, onError = () => {}) {
+  let errorReported = false;
+  const reportError = (error) => {
+    if (errorReported) return;
+    errorReported = true;
+    onError(error);
+  };
+  return {
+    reportError,
+    save(state) {
+      try {
+        storage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
+      } catch (error) {
+        reportError(error);
+        return false;
+      }
+    },
+  };
 }
