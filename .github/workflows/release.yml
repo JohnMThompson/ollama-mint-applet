@@ -29,6 +29,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check web/app.js
+          node --check web/state.js
           node --check web/stream.js
           node --check cinnamon/local-mistral-chat@local/applet.js
 

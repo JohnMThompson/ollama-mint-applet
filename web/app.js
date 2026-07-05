@@ -1,6 +1,5 @@
 import { readStream } from "./stream.js";
-
-const STORAGE_KEY = "local-mistral-chat-state-v1";
+import { loadPersistedState, STORAGE_KEY } from "./state.js";
 
 const els = {
   chatList: document.querySelector("#chatList"),
@@ -29,7 +28,7 @@ const els = {
   temperatureInput: document.querySelector("#temperatureInput"),
 };
 
-let state = loadState();
+let state = loadPersistedState(localStorage);
 let abortController = null;
 let runningModels = [];
 
@@ -80,16 +79,6 @@ function bindEvents() {
   for (const input of [els.systemPrompt, els.temperatureInput, els.contextInput, els.modelSelect]) {
     input.addEventListener("change", saveCurrentSettings);
   }
-}
-
-function loadState() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (parsed && Array.isArray(parsed.chats)) return parsed;
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-  return { chats: [], activeChatId: null };
 }
 
 function saveState() {
