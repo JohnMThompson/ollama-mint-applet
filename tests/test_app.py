@@ -255,7 +255,7 @@ class StaticAssetHeaderTests(unittest.TestCase):
 
         self.assertIn(("Cache-Control", "no-store"), headers)
 
-    def test_api_responses_do_not_get_static_cache_header(self):
+    def test_api_responses_disable_browser_cache(self):
         handler = object.__new__(app.Handler)
         handler.path = "/api/handoffs/example"
         headers = []
@@ -267,7 +267,7 @@ class StaticAssetHeaderTests(unittest.TestCase):
         ):
             handler.end_headers()
 
-        self.assertNotIn(("Cache-Control", "no-store"), headers)
+        self.assertIn(("Cache-Control", "no-store"), headers)
 
 
 class ModelStatusTests(unittest.TestCase):
