@@ -1,6 +1,8 @@
 import time
+import threading
 import unittest
 from email.message import Message
+from io import BytesIO
 from unittest import mock
 
 import app
@@ -52,6 +54,70 @@ class RequestSourceValidationTests(unittest.TestCase):
         handler.send_json.assert_called_once_with(
             {"error": "Content-Type must be application/json"}, 415
         )
+
+
+class RequestResourceLimitTests(unittest.TestCase):
+    def body_handler(self, body, declared_length=None, path="/api/models/load"):
+        handler = request_handler(
+            {
+                "Host": "localhost:17865",
+                "Content-Type": "application/json",
+                "Content-Length": str(
+                    len(body) if declared_length is None else declared_length
+                ),
+            }
+        )
+        handler.path = path
+        handler.rfile = BytesIO(body)
+        return handler
+
+    def test_rejects_oversized_body_before_reading(self):
+        limit = app.MAX_REQUEST_BODY_BYTES["/api/models/load"]
+        handler = self.body_handler(b"", declared_length=limit + 1)
+
+        with self.assertRaisesRegex(app.RequestBodyError, "exceeds") as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 413)
+
+    def test_rejects_incomplete_body(self):
+        handler = self.body_handler(b"{}", declared_length=20)
+
+        with self.assertRaisesRegex(app.RequestBodyError, "Incomplete") as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 400)
+
+    def test_requires_content_length(self):
+        handler = self.body_handler(b"{}")
+        del handler.headers["Content-Length"]
+
+        with self.assertRaises(app.RequestBodyError) as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 411)
+
+    def test_reports_body_read_timeout(self):
+        handler = self.body_handler(b"{}", declared_length=2)
+        handler.rfile = mock.Mock()
+        handler.rfile.read.side_effect = app.socket.timeout()
+
+        with self.assertRaisesRegex(app.RequestBodyError, "Timed out") as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 408)
+
+    def test_server_rejects_work_beyond_concurrency_limit(self):
+        server = object.__new__(app.BoundedThreadingHTTPServer)
+        server._request_slots = threading.BoundedSemaphore(0)
+        request = mock.Mock()
+        server.shutdown_request = mock.Mock()
+
+        server.process_request(request, ("127.0.0.1", 1234))
+
+        request.sendall.assert_called_once()
+        self.assertIn(b"503 Service Unavailable", request.sendall.call_args.args[0])
+        server.shutdown_request.assert_called_once_with(request)
 
 
 class ChatHandoffTests(unittest.TestCase):

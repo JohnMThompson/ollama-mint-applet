@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import socket
 import threading
 import time
 import urllib.error
@@ -24,10 +25,23 @@ HANDOFF_TTL_SECONDS = 10 * 60
 HANDOFFS = {}
 HANDOFFS_LOCK = threading.Lock()
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
+REQUEST_TIMEOUT_SECONDS = 30
+MAX_CONCURRENT_REQUESTS = 16
+MAX_REQUEST_BODY_BYTES = {
+    "/api/chat": 2_000_000,
+    "/api/handoffs": 600_000,
+    "/api/models/load": 4_000,
+}
 
 
 class OllamaError(Exception):
     pass
+
+
+class RequestBodyError(Exception):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
 
 
 def ollama_json(path, payload=None, timeout=30):
@@ -228,10 +242,25 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def read_json_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
-            return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        content_length = self.headers.get("Content-Length")
+        if content_length is None:
+            raise RequestBodyError(411, "Content-Length is required")
+        try:
+            length = int(content_length)
+        except ValueError as exc:
+            raise RequestBodyError(400, "Invalid Content-Length") from exc
+        if length < 0:
+            raise RequestBodyError(400, "Invalid Content-Length")
+        limit = MAX_REQUEST_BODY_BYTES.get(urlsplit(self.path).path, 0)
+        if length > limit:
+            raise RequestBodyError(413, f"Request body exceeds {limit} bytes")
+        try:
+            body = self.rfile.read(length)
+        except (TimeoutError, socket.timeout) as exc:
+            raise RequestBodyError(408, "Timed out reading request body") from exc
+        if len(body) != length:
+            raise RequestBodyError(400, "Incomplete request body")
+        return json.loads(body.decode("utf-8"))
 
     def proxy_models(self):
         try:
@@ -247,7 +276,9 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("Invalid model")
             status = load_ollama_model(model_name.strip())
             return self.send_json(status)
-        except json.JSONDecodeError:
+        except RequestBodyError as exc:
+            return self.send_json({"error": str(exc)}, exc.status)
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return self.send_json({"error": "Invalid JSON body"}, 400)
         except ValueError as exc:
             return self.send_json({"error": str(exc)}, 400)
@@ -257,7 +288,9 @@ class Handler(SimpleHTTPRequestHandler):
     def create_chat_handoff(self):
         try:
             handoff_id = create_handoff(self.read_json_body())
-        except json.JSONDecodeError:
+        except RequestBodyError as exc:
+            return self.send_json({"error": str(exc)}, exc.status)
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return self.send_json({"error": "Invalid JSON body"}, 400)
         except ValueError as exc:
             return self.send_json({"error": str(exc)}, 400)
@@ -274,7 +307,9 @@ class Handler(SimpleHTTPRequestHandler):
     def proxy_chat(self):
         try:
             body = self.read_json_body()
-        except json.JSONDecodeError:
+        except RequestBodyError as exc:
+            return self.send_json({"error": str(exc)}, exc.status)
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return self.send_json({"error": "Invalid JSON body"}, 400)
 
         payload = {
@@ -308,9 +343,47 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.flush()
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    request_queue_size = MAX_CONCURRENT_REQUESTS
+
+    def __init__(self, *args, **kwargs):
+        self._request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        request, address = super().get_request()
+        request.settimeout(REQUEST_TIMEOUT_SECONDS)
+        return request, address
+
+    def process_request(self, request, client_address):
+        if not self._request_slots.acquire(blocking=False):
+            try:
+                request.sendall(
+                    b"HTTP/1.1 503 Service Unavailable\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: 26\r\n"
+                    b"Connection: close\r\n\r\n"
+                    b'{"error":"Server is busy"}'
+                )
+            finally:
+                self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
 def main():
     port = int(os.environ.get("PORT", "17865"))
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = BoundedThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"Serving chat UI at http://127.0.0.1:{port}")
     print(f"Proxying Ollama at {OLLAMA_BASE_URL} with default model {DEFAULT_MODEL}")
     server.serve_forever()
