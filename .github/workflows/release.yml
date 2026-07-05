@@ -1,0 +1,56 @@
+name: Build release package
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Python tests
+        run: PYTHONPATH=. python3 -m pytest -q
+
+      - name: Check Python syntax
+        run: python3 -m py_compile app.py tests/*.py
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check web/app.js
+          node --check cinnamon/local-mistral-chat@local/applet.js
+
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh install.sh
+
+  debian-package:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build package and checksum
+        run: |
+          rm -rf dist
+          ./scripts/build-deb.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Publish immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/local-llm-chat_*_all.deb dist/SHA256SUMS \
+            --clobber
