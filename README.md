@@ -70,18 +70,23 @@ Official references:
 - Ollama Linux install: <https://docs.ollama.com/linux>
 - Mistral model page: <https://ollama.com/library/mistral>
 
-## Install the Debian Package
+## Install
 
-On Linux Mint or another Debian-based distribution, download the package from the [latest GitHub release](https://github.com/JohnMThompson/ollama-mint-applet/releases/latest) and install it:
+On Linux Mint, install or upgrade to the latest published release with one command:
 
-```bash
-curl -LO https://github.com/JohnMThompson/ollama-mint-applet/releases/download/v0.1.0/local-llm-chat_0.1.0_all.deb
-sudo apt install ./local-llm-chat_0.1.0_all.deb
-systemctl --user daemon-reload
-systemctl --user enable --now llm-interface.service
+```sh
+curl -fsSL https://github.com/JohnMThompson/ollama-mint-applet/releases/latest/download/install.sh | bash
 ```
 
-The package installs the server and web UI under `/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and the user service under `/usr/lib/systemd/user`. The service is enabled automatically for future login sessions; the final two commands make it available immediately without logging out.
+The installer resolves an explicit stable GitHub release, verifies the Debian
+package against that release's `SHA256SUMS`, installs or upgrades it with
+`apt-get`, and enables and starts `llm-interface.service` for the current user.
+It is safe to rerun. The package installs the server and web UI under
+`/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and
+the user service under `/usr/lib/systemd/user`.
+
+The installation flow is supported on Linux Mint 22 Cinnamon. It requires
+`curl`, Python 3, `sha256sum`, `apt-get`, systemd user services, and `sudo`.
 
 Add the applet after installation:
 
@@ -91,20 +96,13 @@ Add the applet after installation:
 
 The browser interface is available at <http://127.0.0.1:17865>.
 
-### Upgrade from the Legacy Installer
+### Legacy Source Installations
 
-If you previously installed from source with `scripts/install-cinnamon-applet.sh`, first remove **Local LLM Chat** from the Cinnamon panel. Then remove the user-local copies so they do not override packaged files:
+The installer stops without changing files if it detects a source installation
+that would override packaged files. Remove **Local LLM Chat** from the Cinnamon
+panel, then run the cleanup commands printed by the installer and rerun it.
 
-```bash
-systemctl --user disable --now llm-interface.service
-rm -f ~/.config/systemd/user/llm-interface.service
-rm -rf ~/.local/share/cinnamon/applets/local-mistral-chat@local
-systemctl --user daemon-reload
-```
-
-Install the release package normally after completing this cleanup.
-
-### Uninstall the Package
+### Uninstall and Roll Back
 
 Remove the applet from the Cinnamon panel, then run:
 
@@ -112,6 +110,19 @@ Remove the applet from the Cinnamon panel, then run:
 systemctl --user disable --now llm-interface.service
 sudo apt remove local-llm-chat
 ```
+
+To roll back, choose a previous tag from
+[GitHub Releases](https://github.com/JohnMThompson/ollama-mint-applet/releases)
+and pass it to the same verified installer:
+
+```sh
+curl -fsSL https://github.com/JohnMThompson/ollama-mint-applet/releases/download/v0.1.0/install.sh | VERSION=v0.1.0 bash
+```
+
+This installs the package attached to that exact release. Package configuration
+is retained; use `sudo apt purge local-llm-chat` instead of `remove` to discard it.
+See [Release Artifact Trust](docs/release-trust.md) for checksum guarantees and
+artifact-attestation verification.
 
 ## Install from Source
 
