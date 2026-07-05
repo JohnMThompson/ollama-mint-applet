@@ -108,18 +108,63 @@ def load_ollama_model(model_name):
     return get_model_status()
 
 
+def validate_model_name(value, *, required=False):
+    if value is None and not required:
+        return DEFAULT_MODEL
+    if not isinstance(value, str) or not value.strip() or len(value) > 200:
+        raise ValueError("Invalid model")
+    return value.strip()
+
+
+def validate_messages(value, *, allow_empty=False):
+    if not isinstance(value, list):
+        raise ValueError("messages must be an array")
+    if len(value) > 200:
+        raise ValueError("Too many messages")
+    messages = []
+    total_length = 0
+    for message in value:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object")
+        role = message.get("role")
+        content = message.get("content")
+        if role not in {"system", "user", "assistant"}:
+            raise ValueError("Invalid message role")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("Invalid message content")
+        total_length += len(content.encode("utf-8"))
+        if total_length > 1_500_000:
+            raise ValueError("Messages are too large")
+        messages.append({"role": role, "content": content})
+    if not messages and not allow_empty:
+        raise ValueError("At least one message is required")
+    return messages
+
+
+def validate_chat_payload(payload):
+    model = validate_model_name(payload.get("model"))
+    messages = validate_messages(payload.get("messages"))
+    options = payload.get("options", {})
+    if not isinstance(options, dict):
+        raise ValueError("options must be an object")
+    return {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "options": options.copy(),
+    }
+
+
 def create_handoff(payload):
     if not isinstance(payload, dict):
         raise ValueError("Invalid chat handoff")
 
     messages = []
     total_length = 0
-    for message in payload.get("messages") or []:
-        if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"}:
-            continue
-        content = message.get("content")
-        if not isinstance(content, str) or not content.strip():
-            continue
+    for message in validate_messages(payload.get("messages")):
+        if message["role"] == "system":
+            raise ValueError("Invalid message role")
+        content = message["content"]
         total_length += len(content.encode("utf-8"))
         if total_length > 500_000 or len(messages) >= 100:
             raise ValueError("Chat is too large to transfer")
@@ -130,9 +175,7 @@ def create_handoff(payload):
     if total_length > MAX_HANDOFF_BYTES:
         raise ValueError("Chat is too large to transfer")
 
-    model = payload.get("model") or DEFAULT_MODEL
-    if not isinstance(model, str) or len(model) > 200:
-        raise ValueError("Invalid model")
+    model = validate_model_name(payload.get("model"))
 
     handoff_id = uuid.uuid4().hex
     now = time.time()
@@ -288,7 +331,13 @@ class Handler(SimpleHTTPRequestHandler):
             raise RequestBodyError(408, "Timed out reading request body") from exc
         if len(body) != length:
             raise RequestBodyError(400, "Incomplete request body")
-        return json.loads(body.decode("utf-8"))
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise RequestBodyError(400, "Invalid JSON body") from exc
+        if not isinstance(payload, dict):
+            raise RequestBodyError(400, "JSON body must be an object")
+        return payload
 
     def proxy_models(self):
         try:
@@ -299,15 +348,12 @@ class Handler(SimpleHTTPRequestHandler):
     def load_model(self):
         try:
             body = self.read_json_body()
-            model_name = body.get("model")
-            if not isinstance(model_name, str) or not model_name.strip() or len(model_name) > 200:
-                raise ValueError("Invalid model")
-            status = load_ollama_model(model_name.strip())
+            status = load_ollama_model(
+                validate_model_name(body.get("model"), required=True)
+            )
             return self.send_json(status)
         except RequestBodyError as exc:
             return self.send_json({"error": str(exc)}, exc.status)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return self.send_json({"error": "Invalid JSON body"}, 400)
         except ValueError as exc:
             return self.send_json({"error": str(exc)}, 400)
         except (urllib.error.URLError, TimeoutError, OllamaError) as exc:
@@ -318,8 +364,6 @@ class Handler(SimpleHTTPRequestHandler):
             handoff_id = create_handoff(self.read_json_body())
         except RequestBodyError as exc:
             return self.send_json({"error": str(exc)}, exc.status)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return self.send_json({"error": "Invalid JSON body"}, 400)
         except ValueError as exc:
             return self.send_json({"error": str(exc)}, 400)
         return self.send_json({"id": handoff_id, "path": f"/?handoff={handoff_id}"}, 201)
@@ -334,18 +378,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def proxy_chat(self):
         try:
-            body = self.read_json_body()
+            payload = validate_chat_payload(self.read_json_body())
         except RequestBodyError as exc:
             return self.send_json({"error": str(exc)}, exc.status)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return self.send_json({"error": "Invalid JSON body"}, 400)
-
-        payload = {
-            "model": body.get("model") or DEFAULT_MODEL,
-            "messages": body.get("messages") or [],
-            "stream": True,
-            "options": body.get("options") or {},
-        }
+        except ValueError as exc:
+            return self.send_json({"error": str(exc)}, 400)
 
         request = urllib.request.Request(
             f"{OLLAMA_BASE_URL}/api/chat",

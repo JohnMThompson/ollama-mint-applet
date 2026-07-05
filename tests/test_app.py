@@ -97,6 +97,30 @@ class RequestResourceLimitTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status, 411)
 
+    def test_rejects_invalid_content_length(self):
+        handler = self.body_handler(b"{}")
+        handler.headers.replace_header("Content-Length", "invalid")
+
+        with self.assertRaisesRegex(app.RequestBodyError, "Content-Length") as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 400)
+
+    def test_rejects_invalid_utf8(self):
+        handler = self.body_handler(b"\xff")
+
+        with self.assertRaisesRegex(app.RequestBodyError, "Invalid JSON") as raised:
+            handler.read_json_body()
+
+        self.assertEqual(raised.exception.status, 400)
+
+    def test_rejects_non_object_json(self):
+        for body in (b"[]", b'"text"', b"null"):
+            with self.subTest(body=body):
+                handler = self.body_handler(body)
+                with self.assertRaisesRegex(app.RequestBodyError, "must be an object"):
+                    handler.read_json_body()
+
     def test_reports_body_read_timeout(self):
         handler = self.body_handler(b"{}", declared_length=2)
         handler.rfile = mock.Mock()
@@ -120,20 +144,51 @@ class RequestResourceLimitTests(unittest.TestCase):
         server.shutdown_request.assert_called_once_with(request)
 
 
+class RequestSchemaValidationTests(unittest.TestCase):
+    def test_chat_payload_normalizes_forwarded_fields(self):
+        self.assertEqual(
+            app.validate_chat_payload(
+                {
+                    "model": " mistral:latest ",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "options": {"temperature": 0.4},
+                    "untrusted": "discarded",
+                }
+            ),
+            {
+                "model": "mistral:latest",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "options": {"temperature": 0.4},
+                "stream": True,
+            },
+        )
+
+    def test_chat_payload_rejects_incorrect_field_types(self):
+        valid = {"messages": [{"role": "user", "content": "Hello"}]}
+        invalid_payloads = (
+            {**valid, "model": 42},
+            {**valid, "options": []},
+            {"messages": "not an array"},
+            {"messages": [{"role": "user", "content": 42}]},
+            {"messages": [{"role": "invalid", "content": "Hello"}]},
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                app.validate_chat_payload(payload)
+
+
 class ChatHandoffTests(unittest.TestCase):
     def setUp(self):
         with app.HANDOFFS_LOCK:
             app.HANDOFFS.clear()
 
-    def test_round_trip_filters_invalid_and_empty_messages(self):
+    def test_round_trip_preserves_valid_messages(self):
         handoff_id = app.create_handoff(
             {
                 "model": "mistral:latest",
                 "messages": [
                     {"role": "user", "content": "How does this work?"},
                     {"role": "assistant", "content": "Like this."},
-                    {"role": "system", "content": "ignored"},
-                    {"role": "assistant", "content": "   "},
                 ],
             }
         )
@@ -149,8 +204,17 @@ class ChatHandoffTests(unittest.TestCase):
             },
         )
 
+    def test_rejects_invalid_handoff_messages(self):
+        for message in (
+            {"role": "system", "content": "not transferable"},
+            {"role": "assistant", "content": "   "},
+            "not an object",
+        ):
+            with self.subTest(message=message), self.assertRaises(ValueError):
+                app.create_handoff({"messages": [message]})
+
     def test_rejects_empty_transcript(self):
-        with self.assertRaisesRegex(ValueError, "no messages"):
+        with self.assertRaisesRegex(ValueError, "message"):
             app.create_handoff({"messages": []})
 
     def test_rejects_oversized_transcript(self):
