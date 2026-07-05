@@ -22,6 +22,8 @@ try:
 except ValueError:
     pass
 HANDOFF_TTL_SECONDS = 10 * 60
+MAX_HANDOFFS = 100
+MAX_HANDOFF_BYTES = 5_000_000
 HANDOFFS = {}
 HANDOFFS_LOCK = threading.Lock()
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
@@ -118,13 +120,15 @@ def create_handoff(payload):
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
             continue
-        total_length += len(content)
+        total_length += len(content.encode("utf-8"))
         if total_length > 500_000 or len(messages) >= 100:
             raise ValueError("Chat is too large to transfer")
         messages.append({"role": message["role"], "content": content})
 
     if not messages:
         raise ValueError("Chat has no messages to transfer")
+    if total_length > MAX_HANDOFF_BYTES:
+        raise ValueError("Chat is too large to transfer")
 
     model = payload.get("model") or DEFAULT_MODEL
     if not isinstance(model, str) or len(model) > 200:
@@ -133,15 +137,40 @@ def create_handoff(payload):
     handoff_id = uuid.uuid4().hex
     now = time.time()
     with HANDOFFS_LOCK:
-        expired = [key for key, value in HANDOFFS.items() if now - value["createdAt"] > HANDOFF_TTL_SECONDS]
-        for key in expired:
-            del HANDOFFS[key]
+        cleanup_handoffs_locked(now)
+        while HANDOFFS and (
+            len(HANDOFFS) >= MAX_HANDOFFS
+            or sum(item["sizeBytes"] for item in HANDOFFS.values()) + total_length
+            > MAX_HANDOFF_BYTES
+        ):
+            oldest = min(
+                HANDOFFS,
+                key=lambda key: (HANDOFFS[key]["createdAt"], key),
+            )
+            del HANDOFFS[oldest]
         HANDOFFS[handoff_id] = {
             "createdAt": now,
             "model": model,
             "messages": messages,
+            "sizeBytes": total_length,
         }
     return handoff_id
+
+
+def cleanup_handoffs_locked(now):
+    expired = [
+        key
+        for key, value in HANDOFFS.items()
+        if now - value["createdAt"] > HANDOFF_TTL_SECONDS
+    ]
+    for key in expired:
+        del HANDOFFS[key]
+    return len(expired)
+
+
+def cleanup_handoffs(now=None):
+    with HANDOFFS_LOCK:
+        return cleanup_handoffs_locked(time.time() if now is None else now)
 
 
 def get_handoff(handoff_id):
@@ -379,6 +408,9 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             super().process_request_thread(request, client_address)
         finally:
             self._request_slots.release()
+
+    def service_actions(self):
+        cleanup_handoffs()
 
 
 def main():

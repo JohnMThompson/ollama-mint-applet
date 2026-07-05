@@ -191,6 +191,54 @@ class ChatHandoffTests(unittest.TestCase):
             "Original",
         )
 
+    def test_evicts_oldest_handoff_at_count_limit(self):
+        with mock.patch.object(app, "MAX_HANDOFFS", 2), mock.patch.object(
+            app.time, "time", side_effect=[100, 101, 102]
+        ):
+            first = app.create_handoff(
+                {"messages": [{"role": "user", "content": "first"}]}
+            )
+            second = app.create_handoff(
+                {"messages": [{"role": "user", "content": "second"}]}
+            )
+            third = app.create_handoff(
+                {"messages": [{"role": "user", "content": "third"}]}
+            )
+
+        self.assertNotIn(first, app.HANDOFFS)
+        self.assertIn(second, app.HANDOFFS)
+        self.assertIn(third, app.HANDOFFS)
+
+    def test_evicts_oldest_handoff_at_aggregate_byte_limit(self):
+        with mock.patch.object(app, "MAX_HANDOFF_BYTES", 9), mock.patch.object(
+            app.time, "time", side_effect=[100, 101]
+        ):
+            first = app.create_handoff(
+                {"messages": [{"role": "user", "content": "12345"}]}
+            )
+            second = app.create_handoff(
+                {"messages": [{"role": "user", "content": "67890"}]}
+            )
+
+        self.assertNotIn(first, app.HANDOFFS)
+        self.assertIn(second, app.HANDOFFS)
+
+    def test_server_service_action_removes_idle_expired_handoffs(self):
+        with mock.patch.object(app.time, "time", return_value=100):
+            handoff_id = app.create_handoff(
+                {"messages": [{"role": "user", "content": "temporary"}]}
+            )
+        server = object.__new__(app.BoundedThreadingHTTPServer)
+
+        with mock.patch.object(
+            app.time,
+            "time",
+            return_value=100 + app.HANDOFF_TTL_SECONDS + 1,
+        ):
+            server.service_actions()
+
+        self.assertNotIn(handoff_id, app.HANDOFFS)
+
 
 class StaticAssetHeaderTests(unittest.TestCase):
     def test_static_assets_disable_browser_cache(self):
