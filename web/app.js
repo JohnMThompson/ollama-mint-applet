@@ -1,3 +1,5 @@
+import { readStream } from "./stream.js";
+
 const STORAGE_KEY = "local-mistral-chat-state-v1";
 
 const els = {
@@ -457,26 +459,6 @@ function buildRequest(chat) {
       temperature: Number(settings.temperature ?? 0.7),
     },
   };
-}
-
-async function readStream(body, onToken) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const data = JSON.parse(line);
-      if (data.error) throw new Error(data.error);
-      if (data.message?.content) onToken(data.message.content);
-    }
-  }
 }
 
 async function summarizeChatTitle(chat) {

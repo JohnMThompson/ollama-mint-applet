@@ -1,0 +1,5 @@
+{
+  "name": "local-llm-chat",
+  "private": true,
+  "type": "module"
+}
