@@ -2,7 +2,8 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-version="${1:-$(python3 -c 'import json; print(json.load(open("'"${repo_dir}"'/cinnamon/local-mistral-chat@local/metadata.json"))["version"])')}"
+version="$(tr -d '[:space:]' < "${repo_dir}/VERSION")"
+requested_version="${1:-${version}}"
 architecture="all"
 package_name="local-llm-chat"
 build_root="$(mktemp -d)"
@@ -23,6 +24,22 @@ if [[ ! "${version}" =~ ^[0-9][0-9A-Za-z.+:~_-]*$ ]]; then
     echo "Invalid Debian package version: ${version}" >&2
     exit 1
 fi
+if [[ "${requested_version}" != "${version}" ]]; then
+    echo "Requested version ${requested_version} does not match VERSION (${version})." >&2
+    exit 1
+fi
+python3 - "${repo_dir}/cinnamon/local-mistral-chat@local/metadata.json" "${version}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    metadata = json.load(source)
+if metadata.get("version") != sys.argv[2]:
+    raise SystemExit(
+        f"Cinnamon metadata version {metadata.get('version')!r} "
+        f"does not match VERSION ({sys.argv[2]})"
+    )
+PY
 
 install -d \
     "${package_root}/DEBIAN" \
@@ -59,4 +76,9 @@ chmod 0644 "${package_root}/usr/share/doc/${package_name}/changelog.gz"
 
 output_path="${output_dir}/${package_name}_${version}_${architecture}.deb"
 dpkg-deb --root-owner-group --build "${package_root}" "${output_path}"
+(
+    cd "${output_dir}"
+    sha256sum "$(basename "${output_path}")" > SHA256SUMS
+)
 echo "Built ${output_path}"
+echo "Wrote ${output_dir}/SHA256SUMS"

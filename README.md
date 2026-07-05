@@ -142,10 +142,11 @@ Build a Debian package from source with:
 ./scripts/build-deb.sh
 ```
 
-Pass a version argument to override the version from the applet metadata:
+`VERSION` is authoritative for package, release, and applet versions. A supplied
+build version must match it:
 
 ```bash
-./scripts/build-deb.sh 0.1.1
+./scripts/build-deb.sh 0.1.0
 ```
 
 ## Run the Browser UI from Source
