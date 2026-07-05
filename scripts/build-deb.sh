@@ -58,6 +58,9 @@ install -m 0644 "${repo_dir}/app.py" "${package_root}/usr/lib/llm-interface/app.
 install -m 0755 \
     "${repo_dir}/scripts/run-llm-interface-service.sh" \
     "${package_root}/usr/lib/llm-interface/scripts/run-llm-interface-service.sh"
+install -m 0755 \
+    "${repo_dir}/scripts/check-service-health.py" \
+    "${package_root}/usr/lib/llm-interface/scripts/check-service-health.py"
 install -m 0644 "${repo_dir}/web/"* "${package_root}/usr/lib/llm-interface/web/"
 install -m 0644 \
     "${repo_dir}/cinnamon/local-mistral-chat@local/"* \

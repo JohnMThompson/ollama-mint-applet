@@ -242,7 +242,14 @@ class Handler(SimpleHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == "/api/config":
-            return self.send_json({"ollamaBaseUrl": OLLAMA_BASE_URL, "defaultModel": DEFAULT_MODEL})
+            return self.send_json(
+                {
+                    "application": "local-llm-chat",
+                    "apiVersion": 1,
+                    "ollamaBaseUrl": OLLAMA_BASE_URL,
+                    "defaultModel": DEFAULT_MODEL,
+                }
+            )
         if path == "/api/models":
             return self.proxy_models()
         if path.startswith("/api/handoffs/"):

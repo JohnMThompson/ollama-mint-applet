@@ -24,7 +24,7 @@ jobs:
         run: PYTHONPATH=. python3 -m pytest -q
 
       - name: Check Python syntax
-        run: python3 -m py_compile app.py tests/*.py
+        run: python3 -m py_compile app.py scripts/*.py tests/*.py
 
       - name: Check JavaScript syntax
         run: |
