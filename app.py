@@ -155,14 +155,29 @@ def validate_messages(value, *, allow_empty=False):
 def validate_chat_payload(payload):
     model = validate_model_name(payload.get("model"))
     messages = validate_messages(payload.get("messages"))
-    options = payload.get("options", {})
-    if not isinstance(options, dict):
+    raw_options = payload.get("options", {})
+    if not isinstance(raw_options, dict):
         raise ValueError("options must be an object")
+    unsupported_options = set(raw_options) - {"temperature"}
+    if unsupported_options:
+        raise ValueError(
+            f"Unsupported option: {sorted(unsupported_options)[0]}"
+        )
+    options = {}
+    if "temperature" in raw_options:
+        temperature = raw_options["temperature"]
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not 0 <= temperature <= 2
+        ):
+            raise ValueError("temperature must be a number between 0 and 2")
+        options["temperature"] = temperature
     return {
         "model": model,
         "messages": messages,
         "stream": True,
-        "options": options.copy(),
+        "options": options,
     }
 
 

@@ -1,3 +1,4 @@
+import json
 import time
 import threading
 import unittest
@@ -168,6 +169,12 @@ class RequestSchemaValidationTests(unittest.TestCase):
         invalid_payloads = (
             {**valid, "model": 42},
             {**valid, "options": []},
+            {**valid, "options": {"temperature": "hot"}},
+            {**valid, "options": {"temperature": True}},
+            {**valid, "options": {"temperature": -0.1}},
+            {**valid, "options": {"temperature": 2.1}},
+            {**valid, "options": {"num_ctx": 4096}},
+            {**valid, "options": {"unknown": {"nested": True}}},
             {"messages": "not an array"},
             {"messages": [{"role": "user", "content": 42}]},
             {"messages": [{"role": "invalid", "content": "Hello"}]},
@@ -175,6 +182,30 @@ class RequestSchemaValidationTests(unittest.TestCase):
         for payload in invalid_payloads:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 app.validate_chat_payload(payload)
+
+    def test_invalid_nested_options_return_400_without_reaching_ollama(self):
+        body = json.dumps(
+            {
+                "messages": [{"role": "user", "content": "Hello"}],
+                "options": {"temperature": "hot", "unknown": {"nested": True}},
+            }
+        ).encode()
+        handler = request_handler(
+            {
+                "Host": "localhost:17865",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body)),
+            }
+        )
+        handler.path = "/api/chat"
+        handler.rfile = BytesIO(body)
+
+        with mock.patch.object(app.urllib.request, "urlopen") as urlopen:
+            handler.proxy_chat()
+
+        handler.send_json.assert_called_once()
+        self.assertEqual(handler.send_json.call_args.args[1], 400)
+        urlopen.assert_not_called()
 
 
 class ChatHandoffTests(unittest.TestCase):
