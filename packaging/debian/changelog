@@ -1,7 +1,9 @@
 local-llm-chat (@VERSION@) unstable; urgency=medium
 
-  * Package the local web interface, user service, and Cinnamon applet.
-  * Detect, select, and load downloaded Ollama models.
-  * Move the default web interface port to 17865.
+  * Add a verified single-command release installer.
+  * Harden and validate the local HTTP service and systemd unit.
+  * Stream browser and Cinnamon applet responses incrementally.
+  * Add bounded browser persistence and accessibility improvements.
+  * Add integration, browser, packaging, and reproducibility checks.
 
- -- JohnMThompson <johnmichaelthomp@gmail.com>  Fri, 03 Jul 2026 22:25:00 -0500
+ -- JohnMThompson <johnmichaelthomp@gmail.com>  Sun, 05 Jul 2026 15:00:00 -0500

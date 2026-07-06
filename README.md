@@ -85,8 +85,12 @@ It is safe to rerun. The package installs the server and web UI under
 `/usr/lib/llm-interface`, the applet under `/usr/share/cinnamon/applets`, and
 the user service under `/usr/lib/systemd/user`.
 
-The installation flow is supported on Linux Mint 22 Cinnamon. It requires
-`curl`, Python 3, `sha256sum`, `apt-get`, systemd user services, and `sudo`.
+Tested on Linux Mint 21.3 Cinnamon. Linux Mint 22 compatibility is expected but
+has not yet been runtime-validated; see
+[Issue #9](https://github.com/JohnMThompson/ollama-mint-applet/issues/9).
+Mint 22 is not claimed as fully supported until its Cinnamon and user-systemd
+smoke test passes. Installation requires `curl`, Python 3, `sha256sum`,
+`apt-get`, systemd user services, and `sudo`.
 
 Add the applet after installation:
 
@@ -146,7 +150,7 @@ Build a Debian package from source with:
 build version must match it:
 
 ```bash
-./scripts/build-deb.sh 0.1.0
+./scripts/build-deb.sh 0.2.0
 ```
 
 Reproduce a package with an explicit source timestamp:

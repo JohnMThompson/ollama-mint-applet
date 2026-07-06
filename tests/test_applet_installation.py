@@ -7,6 +7,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 UUID = "local-mistral-chat@local"
 APPLET_SOURCE = ROOT / "cinnamon" / UUID
+VERSION = (ROOT / "VERSION").read_text().strip()
 
 
 def required_applet_files():
@@ -71,7 +72,7 @@ def test_debian_package_contains_every_runtime_applet_file(tmp_path):
         [
             "dpkg-deb",
             "--extract",
-            str(output / "local-llm-chat_0.1.0_all.deb"),
+            str(output / f"local-llm-chat_{VERSION}_all.deb"),
             str(package_root),
         ],
         check=True,

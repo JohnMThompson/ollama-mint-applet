@@ -4,6 +4,7 @@ import os
 
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = (ROOT / "VERSION").read_text().strip()
 
 
 def test_build_rejects_version_different_from_authoritative_version():
@@ -45,6 +46,6 @@ def test_build_is_reproducible(tmp_path):
             text=True,
             capture_output=True,
         )
-        hashes.append((output / "local-llm-chat_0.1.0_all.deb").read_bytes())
+        hashes.append((output / f"local-llm-chat_{VERSION}_all.deb").read_bytes())
 
     assert hashes[0] == hashes[1]
