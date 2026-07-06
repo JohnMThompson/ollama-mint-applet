@@ -317,20 +317,11 @@ function renderChatList() {
 function renderChatItem(chat) {
   const item = document.createElement("div");
   item.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
-  item.tabIndex = 0;
-  item.role = "button";
   const openChat = () => {
     state.activeChatId = chat.id;
     render();
     closeMobileSidebar();
   };
-  item.addEventListener("click", openChat);
-  item.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openChat();
-    }
-  });
 
   const label = document.createElement("span");
   label.className = "chat-item-title";
@@ -344,32 +335,35 @@ function renderChatItem(chat) {
   text.className = "chat-item-text";
   text.append(label, meta);
 
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "open-chat";
+  open.setAttribute("aria-label", `Open chat: ${chat.title}`);
+  if (chat.id === state.activeChatId) open.setAttribute("aria-current", "page");
+  open.append(text);
+  open.addEventListener("click", openChat);
+
   const del = document.createElement("button");
   del.type = "button";
   del.className = "delete-chat";
   del.textContent = "×";
   del.title = "Delete chat";
-  del.addEventListener("click", (event) => {
-    event.stopPropagation();
-    deleteChat(chat.id);
-  });
+  del.setAttribute("aria-label", `Delete chat: ${chat.title}`);
+  del.addEventListener("click", () => deleteChat(chat.id));
 
   const rename = document.createElement("button");
   rename.type = "button";
   rename.className = "rename-chat";
   rename.textContent = "✎";
   rename.title = "Rename chat";
-  rename.setAttribute("aria-label", "Rename chat");
-  rename.addEventListener("click", (event) => {
-    event.stopPropagation();
-    renameChat(chat.id);
-  });
+  rename.setAttribute("aria-label", `Rename chat: ${chat.title}`);
+  rename.addEventListener("click", () => renameChat(chat.id));
 
   const actions = document.createElement("span");
   actions.className = "chat-item-actions";
   actions.append(rename, del);
 
-  item.append(text, actions);
+  item.append(open, actions);
   return item;
 }
 

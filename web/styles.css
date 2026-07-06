@@ -145,6 +145,16 @@ button {
   text-align: left;
 }
 
+.open-chat {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
 .chat-item:hover,
 .chat-item.active {
   background: var(--panel-2);
