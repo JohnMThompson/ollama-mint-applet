@@ -9,6 +9,7 @@
   --accent: #136f63;
   --accent-strong: #0d5b51;
   --danger: #b42318;
+  --focus-ring: #005fcc;
   --shadow: 0 16px 48px rgba(31, 35, 40, 0.12);
 }
 
@@ -22,6 +23,7 @@
     --border: #383c42;
     --accent: #30a58f;
     --accent-strong: #48bca5;
+    --focus-ring: #8bd5ff;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   }
 }
@@ -113,7 +115,6 @@ button {
   border-radius: 8px;
   background: var(--panel);
   color: var(--text);
-  outline: none;
 }
 
 .search-wrap input {
@@ -431,7 +432,6 @@ button {
   border: 0;
   background: transparent;
   color: var(--text);
-  outline: none;
   overflow-y: auto;
   resize: none;
   scrollbar-width: thin;
@@ -511,6 +511,20 @@ button {
 
 .dialog-error {
   color: var(--danger) !important;
+}
+
+:where(button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.composer:focus-within {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.composer textarea:focus-visible {
+  outline: 0;
 }
 
 @media (max-width: 760px) {
