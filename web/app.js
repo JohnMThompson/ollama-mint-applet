@@ -74,9 +74,14 @@ function bindEvents() {
 
   els.searchInput.addEventListener("input", renderChatList);
   els.settingsButton.addEventListener("click", () => {
-    els.settingsPanel.hidden = !els.settingsPanel.hidden;
+    const expanded = els.settingsPanel.hidden;
+    els.settingsPanel.hidden = !expanded;
+    els.settingsButton.setAttribute("aria-expanded", String(expanded));
   });
-  els.menuButton.addEventListener("click", () => els.sidebar.classList.toggle("open"));
+  els.menuButton.addEventListener("click", () => {
+    const expanded = els.sidebar.classList.toggle("open");
+    els.menuButton.setAttribute("aria-expanded", String(expanded));
+  });
   els.stopButton.addEventListener("click", stopGeneration);
 
   els.promptInput.addEventListener("keydown", (event) => {
@@ -598,6 +603,7 @@ function scrollToBottom() {
 
 function closeMobileSidebar() {
   els.sidebar.classList.remove("open");
+  els.menuButton.setAttribute("aria-expanded", "false");
 }
 
 function makeFallbackTitle(content) {

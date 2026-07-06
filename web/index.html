@@ -13,7 +13,7 @@
           <button class="new-chat" id="newChatButton" type="button">+ New chat</button>
         </div>
         <div class="search-wrap">
-          <input id="searchInput" type="search" placeholder="Search chats" autocomplete="off">
+          <input id="searchInput" type="search" placeholder="Search chats" autocomplete="off" aria-label="Search chats">
         </div>
         <nav class="chat-list" id="chatList" aria-label="Chat history"></nav>
         <div class="sidebar-footer">
@@ -24,14 +24,14 @@
 
       <main class="chat-panel">
         <header class="topbar">
-          <button class="icon-button menu-button" id="menuButton" type="button" aria-label="Toggle sidebar">☰</button>
+          <button class="icon-button menu-button" id="menuButton" type="button" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false">☰</button>
           <div class="title-block">
             <strong id="chatTitle">New chat</strong>
             <span id="connectionStatus">Checking Ollama...</span>
           </div>
           <div class="controls">
             <select id="modelSelect" aria-label="Model"></select>
-            <button class="ghost-button" id="settingsButton" type="button">Settings</button>
+            <button class="ghost-button" id="settingsButton" type="button" aria-controls="settingsPanel" aria-expanded="false">Settings</button>
           </div>
         </header>
 
@@ -59,7 +59,7 @@
         <section class="messages" id="messages" aria-live="polite"></section>
 
         <form class="composer" id="composer">
-          <textarea id="promptInput" rows="1" placeholder="Ask a question..." autocomplete="off"></textarea>
+          <textarea id="promptInput" rows="1" placeholder="Ask a question..." autocomplete="off" aria-label="Message"></textarea>
           <button class="send-button" id="sendButton" type="submit">Send</button>
           <button class="stop-button" id="stopButton" type="button" hidden>Stop</button>
         </form>
