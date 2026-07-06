@@ -12,6 +12,7 @@ imports.gi.versions.Soup = "3.0";
 const Soup = imports.gi.Soup;
 const St = imports.gi.St;
 const Util = imports.misc.util;
+let AppletStream = null;
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:17865";
 const LEGACY_SERVER_URL = "http://127.0.0.1:3000";
@@ -74,6 +75,8 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.modelName = DEFAULT_MODEL;
         this.activeMessage = null;
         this.activeRequest = null;
+        this.activeMessageBubble = null;
+        this.streamRenderSource = 0;
         this.isGenerating = false;
         this.isLoadingModel = false;
 
@@ -115,6 +118,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     on_applet_removed_from_panel() {
         this._cancelActiveRequest();
+        this._cancelStreamRender();
         Main.layoutManager.untrackChrome(this.menu.actor);
         this.settings.finalize();
     }
@@ -465,48 +469,64 @@ class LocalMistralChatApplet extends Applet.TextApplet {
             options: { temperature: 0.7 }
         };
 
-        this.activeRequest = this._request("POST", this.serverUrl + "/api/chat", JSON.stringify(payload), Lang.bind(this, function(status, body) {
+        let parser = new AppletStream.NdjsonStreamParser(Lang.bind(this, function(content) {
             if (!this.activeMessage) {
                 return;
             }
+            this.activeMessage.content += content;
+            this._scheduleStreamRender();
+        }));
 
-            if (status < 200 || status >= 300) {
-                this.activeMessage.content = "Error: chat request failed (" + status + ")";
-            } else {
-                this.activeMessage.content = this._parseChatResponse(body);
+        let finish = Lang.bind(this, function(status, error) {
+            if (!this.activeMessage) {
+                return;
             }
-
+            try {
+                parser.finish();
+            } catch (parseError) {
+                error = parseError;
+            }
+            if (error) {
+                this.activeMessage.content =
+                    (this.activeMessage.content ? this.activeMessage.content + "\n\n" : "") +
+                    "Error: " + error.message;
+            } else if (status < 200 || status >= 300) {
+                this.activeMessage.content = "Error: chat request failed (" + status + ")";
+            } else if (!this.activeMessage.content.trim()) {
+                this.activeMessage.content = "No response.";
+            }
+            this._flushStreamRender();
             this._setGenerating(false);
-            this._renderMessages();
             this.activeMessage = null;
             this.activeRequest = null;
-        }));
-    }
+        });
 
-    _parseChatResponse(body) {
-        let content = "";
-        let lines = body.split("\n");
-
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim();
-            if (!line) {
-                continue;
-            }
-
-            try {
-                let data = JSON.parse(line);
-                if (data.error) {
-                    return "Error: " + data.error;
-                }
-                if (data.message && data.message.content) {
-                    content += data.message.content;
-                }
-            } catch (e) {
-                return body.trim() || "Error: invalid chat response";
-            }
+        if (this.usesSoup3) {
+            this.activeRequest = this._streamRequest(
+                "POST",
+                this.serverUrl + "/api/chat",
+                JSON.stringify(payload),
+                Lang.bind(this, function(line) {
+                    parser.push(line + "\n");
+                }),
+                finish
+            );
+        } else {
+            this.activeRequest = this._request(
+                "POST",
+                this.serverUrl + "/api/chat",
+                JSON.stringify(payload),
+                Lang.bind(this, function(status, body) {
+                    let error = null;
+                    try {
+                        parser.push(body);
+                    } catch (parseError) {
+                        error = parseError;
+                    }
+                    finish(status, error);
+                })
+            );
         }
-
-        return content.trim() || "No response.";
     }
 
     _request(method, url, body, callback) {
@@ -566,13 +586,113 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         };
     }
 
+    _streamRequest(method, url, body, onLine, onComplete) {
+        let message = Soup.Message.new(method, url);
+        if (!message) {
+            onComplete(0, new Error("Unable to create request"));
+            return null;
+        }
+        let cancellable = new Gio.Cancellable();
+        message.get_request_headers().append("Content-Type", "application/json");
+        message.set_request_body_from_bytes(
+            "application/json",
+            new GLib.Bytes(ByteArray.fromString(body))
+        );
+
+        this.httpSession.send_async(
+            message,
+            GLib.PRIORITY_DEFAULT,
+            cancellable,
+            Lang.bind(this, function(session, result) {
+                let input;
+                try {
+                    input = session.send_finish(result);
+                } catch (error) {
+                    if (!cancellable.is_cancelled()) {
+                        onComplete(0, error);
+                    }
+                    return;
+                }
+                let dataInput = new Gio.DataInputStream({ base_stream: input });
+                let completed = false;
+                let complete = function(error) {
+                    if (completed || cancellable.is_cancelled()) {
+                        return;
+                    }
+                    completed = true;
+                    onComplete(message.get_status() || 0, error || null);
+                };
+                let readNext = function() {
+                    dataInput.read_line_async(
+                        GLib.PRIORITY_DEFAULT,
+                        cancellable,
+                        function(stream, readResult) {
+                            try {
+                                let result = stream.read_line_finish_utf8(readResult);
+                                let line = result[0];
+                                if (line === null) {
+                                    complete(null);
+                                    return;
+                                }
+                                onLine(line);
+                                readNext();
+                            } catch (error) {
+                                complete(error);
+                            }
+                        }
+                    );
+                };
+                readNext();
+            })
+        );
+
+        return {
+            cancel: function() {
+                cancellable.cancel();
+            }
+        };
+    }
+
+    _scheduleStreamRender() {
+        if (this.streamRenderSource) {
+            return;
+        }
+        this.streamRenderSource = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            33,
+            Lang.bind(this, function() {
+                this.streamRenderSource = 0;
+                this._updateActiveMessageBubble();
+                return GLib.SOURCE_REMOVE;
+            })
+        );
+    }
+
+    _cancelStreamRender() {
+        if (this.streamRenderSource) {
+            GLib.source_remove(this.streamRenderSource);
+            this.streamRenderSource = 0;
+        }
+    }
+
+    _flushStreamRender() {
+        this._cancelStreamRender();
+        this._updateActiveMessageBubble();
+    }
+
+    _updateActiveMessageBubble() {
+        if (this.activeMessageBubble && this.activeMessage) {
+            this.activeMessageBubble.set_text(this.activeMessage.content || "...");
+        }
+    }
+
     _stopGeneration() {
         this._cancelActiveRequest();
         if (this.activeMessage && !this.activeMessage.content) {
             this.activeMessage.content = "Stopped.";
         }
         this._setGenerating(false);
-        this._renderMessages();
+        this._flushStreamRender();
         this.activeMessage = null;
     }
 
@@ -585,6 +705,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     _clearChat() {
         this._cancelActiveRequest();
+        this._cancelStreamRender();
         this.messages = [];
         this.activeMessage = null;
         this._setGenerating(false);
@@ -636,6 +757,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 
     _renderMessages() {
         this.thread.destroy_all_children();
+        this.activeMessageBubble = null;
 
         if (!this.messages.length) {
             this.thread.add_actor(new St.Label({
@@ -677,6 +799,9 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         bubble.clutter_text.line_wrap = true;
         bubble.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         bubble.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+        if (message === this.activeMessage) {
+            this.activeMessageBubble = bubble;
+        }
         item.add_actor(bubble);
 
         return item;
@@ -684,5 +809,8 @@ class LocalMistralChatApplet extends Applet.TextApplet {
 }
 
 function main(metadata, orientation, panelHeight, instanceId) {
+    if (!AppletStream) {
+        AppletStream = imports.applets[metadata.uuid].appletStream;
+    }
     return new LocalMistralChatApplet(metadata, orientation, panelHeight, instanceId);
 }

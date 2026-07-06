@@ -32,6 +32,7 @@ jobs:
           node --check web/scheduler.js
           node --check web/state.js
           node --check web/stream.js
+          node --check cinnamon/local-mistral-chat@local/appletStream.js
           node --check cinnamon/local-mistral-chat@local/applet.js
 
       - name: Install JavaScript test dependencies
