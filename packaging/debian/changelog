@@ -1,9 +1,6 @@
 local-llm-chat (@VERSION@) unstable; urgency=medium
 
-  * Add a verified single-command release installer.
-  * Harden and validate the local HTTP service and systemd unit.
-  * Stream browser and Cinnamon applet responses incrementally.
-  * Add bounded browser persistence and accessibility improvements.
-  * Add integration, browser, packaging, and reproducibility checks.
+  * Keep the chat composer visible above the viewport edge.
+  * Fix user-service startup on systems that reject capability sandboxing.
 
- -- JohnMThompson <johnmichaelthomp@gmail.com>  Sun, 05 Jul 2026 15:00:00 -0500
+ -- JohnMThompson <johnmichaelthomp@gmail.com>  Mon, 06 Jul 2026 12:30:00 -0500
