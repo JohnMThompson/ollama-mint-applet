@@ -150,7 +150,7 @@ Build a Debian package from source with:
 build version must match it:
 
 ```bash
-./scripts/build-deb.sh 0.3.0
+./scripts/build-deb.sh 0.3.1
 ```
 
 Reproduce a package with an explicit source timestamp:

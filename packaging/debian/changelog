@@ -1,6 +1,7 @@
 local-llm-chat (@VERSION@) unstable; urgency=medium
 
-  * Keep the chat composer visible above the viewport edge.
-  * Fix user-service startup on systems that reject capability sandboxing.
+  * Switch among installed models from the web chat and Cinnamon applet.
+  * Unload the previous model after its replacement is ready.
+  * Fix user-service startup on systems that reject service sandboxing.
 
- -- JohnMThompson <johnmichaelthomp@gmail.com>  Mon, 06 Jul 2026 12:30:00 -0500
+ -- JohnMThompson <johnmichaelthomp@gmail.com>  Mon, 06 Jul 2026 15:20:00 -0500
