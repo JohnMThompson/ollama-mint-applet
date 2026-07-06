@@ -1,5 +1,10 @@
 import { readStream } from "./stream.js";
-import { createStatePersistence, loadPersistedState } from "./state.js";
+import {
+  createStatePersistence,
+  enforceRetention,
+  loadPersistedState,
+  MAX_STORED_BYTES,
+} from "./state.js";
 
 const els = {
   chatList: document.querySelector("#chatList"),
@@ -24,6 +29,7 @@ const els = {
   settingsPanel: document.querySelector("#settingsPanel"),
   sidebar: document.querySelector("#sidebar"),
   stopButton: document.querySelector("#stopButton"),
+  storageStatus: document.querySelector("#storageStatus"),
   systemPrompt: document.querySelector("#systemPrompt"),
   temperatureInput: document.querySelector("#temperatureInput"),
 };
@@ -38,6 +44,7 @@ const persistence = createStatePersistence(localStorage, () => {
 let state = loadPersistedState(localStorage, {
   onError: persistence.reportError,
 });
+reportRetention(enforceRetention(state));
 let abortController = null;
 let runningModels = [];
 
@@ -91,7 +98,22 @@ function bindEvents() {
 }
 
 function saveState() {
+  reportRetention(enforceRetention(state));
   persistence.save(state);
+}
+
+function reportRetention(report) {
+  const usedKilobytes = Math.ceil(report.estimatedBytes / 1000);
+  const limitMegabytes = (MAX_STORED_BYTES / 1_000_000).toFixed(0);
+  els.storageStatus.textContent = `${usedKilobytes} KB of ${limitMegabytes} MB history`;
+  const changes =
+    report.truncatedMessages + report.removedMessages + report.removedChats;
+  if (!changes) return;
+  queueMicrotask(() => {
+    showToast(
+      `History limits applied: ${report.removedChats} chats removed, ${report.removedMessages} older messages removed, ${report.truncatedMessages} long messages truncated.`,
+    );
+  });
 }
 
 async function importChatHandoff() {

@@ -80,6 +80,15 @@ button {
   gap: 8px;
 }
 
+.sidebar-footer {
+  flex-direction: column;
+}
+
+#storageStatus {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .new-chat,
 .send-button {
   border: 0;

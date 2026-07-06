@@ -1,5 +1,10 @@
 export const STORAGE_KEY = "local-mistral-chat-state-v1";
 export const STATE_SCHEMA_VERSION = 2;
+export const MAX_MESSAGE_CHARACTERS = 100_000;
+export const MAX_MESSAGES_PER_CHAT = 200;
+export const MAX_CHATS = 100;
+export const MAX_STORED_BYTES = 4_000_000;
+const TRUNCATION_NOTICE = "\n\n[Message truncated to fit local history limits]";
 
 const DEFAULT_SETTINGS = Object.freeze({
   model: "mistral",
@@ -147,4 +152,77 @@ export function createStatePersistence(storage, onError = () => {}) {
       }
     },
   };
+}
+
+export function estimatedStateBytes(state) {
+  return JSON.stringify(state).length * 2;
+}
+
+export function enforceRetention(state) {
+  const report = {
+    truncatedMessages: 0,
+    removedMessages: 0,
+    removedChats: 0,
+    estimatedBytes: 0,
+  };
+  for (const chat of state.chats) {
+    for (const message of chat.messages) {
+      if (message.content.length > MAX_MESSAGE_CHARACTERS) {
+        message.content =
+          message.content.slice(
+            0,
+            MAX_MESSAGE_CHARACTERS - TRUNCATION_NOTICE.length,
+          ) + TRUNCATION_NOTICE;
+        report.truncatedMessages += 1;
+      }
+    }
+    if (chat.messages.length > MAX_MESSAGES_PER_CHAT) {
+      report.removedMessages += chat.messages.length - MAX_MESSAGES_PER_CHAT;
+      chat.messages = chat.messages.slice(-MAX_MESSAGES_PER_CHAT);
+    }
+  }
+
+  const oldestRemovableChatIndex = () => {
+    let candidate = -1;
+    for (let index = 0; index < state.chats.length; index += 1) {
+      if (state.chats[index].id === state.activeChatId) continue;
+      if (
+        candidate === -1 ||
+        state.chats[index].updatedAt < state.chats[candidate].updatedAt ||
+        (state.chats[index].updatedAt === state.chats[candidate].updatedAt &&
+          state.chats[index].id < state.chats[candidate].id)
+      ) {
+        candidate = index;
+      }
+    }
+    return candidate;
+  };
+
+  while (state.chats.length > MAX_CHATS) {
+    const index = oldestRemovableChatIndex();
+    if (index === -1) break;
+    state.chats.splice(index, 1);
+    report.removedChats += 1;
+  }
+
+  let bytes = estimatedStateBytes(state);
+  while (bytes > MAX_STORED_BYTES && state.chats.length > 1) {
+    const index = oldestRemovableChatIndex();
+    if (index === -1) break;
+    state.chats.splice(index, 1);
+    report.removedChats += 1;
+    bytes = estimatedStateBytes(state);
+  }
+
+  const activeChat = state.chats.find((chat) => chat.id === state.activeChatId);
+  while (
+    bytes > MAX_STORED_BYTES &&
+    activeChat?.messages.length > 1
+  ) {
+    activeChat.messages.shift();
+    report.removedMessages += 1;
+    bytes = estimatedStateBytes(state);
+  }
+  report.estimatedBytes = bytes;
+  return report;
 }

@@ -3,7 +3,13 @@ import test from "node:test";
 
 import {
   createStatePersistence,
+  enforceRetention,
+  estimatedStateBytes,
   loadPersistedState,
+  MAX_CHATS,
+  MAX_MESSAGE_CHARACTERS,
+  MAX_MESSAGES_PER_CHAT,
+  MAX_STORED_BYTES,
   normalizePersistedState,
   STATE_SCHEMA_VERSION,
   STORAGE_KEY,
@@ -134,4 +140,90 @@ test("storage access failure returns usable state and reports once", () => {
   assert.deepEqual(state.chats, []);
   assert.equal(errors.length, 1);
   assert.equal(errors[0].name, "SecurityError");
+});
+
+
+function chat(id, updatedAt, messages = []) {
+  return {
+    id,
+    title: id,
+    createdAt: updatedAt,
+    updatedAt,
+    messages,
+    settings: {},
+  };
+}
+
+
+test("applies per-message and per-chat retention limits", () => {
+  const messages = Array.from({ length: MAX_MESSAGES_PER_CHAT + 2 }, (_, index) => ({
+    role: "user",
+    content: index === MAX_MESSAGES_PER_CHAT + 1
+      ? "x".repeat(MAX_MESSAGE_CHARACTERS + 20)
+      : `message-${index}`,
+    createdAt: index,
+  }));
+  const state = {
+    chats: [chat("active", 1, messages)],
+    activeChatId: "active",
+  };
+
+  const report = enforceRetention(state);
+
+  assert.equal(state.chats[0].messages.length, MAX_MESSAGES_PER_CHAT);
+  assert.equal(state.chats[0].messages[0].content, "message-2");
+  assert.equal(
+    state.chats[0].messages.at(-1).content.length,
+    MAX_MESSAGE_CHARACTERS,
+  );
+  assert.equal(report.removedMessages, 2);
+  assert.equal(report.truncatedMessages, 1);
+});
+
+
+test("evicts oldest inactive chats deterministically", () => {
+  const chats = Array.from({ length: MAX_CHATS + 2 }, (_, index) =>
+    chat(`chat-${String(index).padStart(3, "0")}`, index),
+  );
+  const state = { chats, activeChatId: "chat-000" };
+
+  const report = enforceRetention(state);
+
+  assert.equal(state.chats.length, MAX_CHATS);
+  assert(state.chats.some((item) => item.id === "chat-000"));
+  assert(!state.chats.some((item) => item.id === "chat-001"));
+  assert(!state.chats.some((item) => item.id === "chat-002"));
+  assert.equal(report.removedChats, 2);
+});
+
+
+test("enforces aggregate storage budget while preserving active chat", () => {
+  const largeMessage = (content) => ({
+    role: "user",
+    content,
+    createdAt: 1,
+  });
+  const state = {
+    chats: [
+      chat("active", 3, [largeMessage("active")]),
+      chat("older", 1, [largeMessage("x".repeat(MAX_MESSAGE_CHARACTERS))]),
+      chat("newer", 2, [largeMessage("y".repeat(MAX_MESSAGE_CHARACTERS))]),
+    ],
+    activeChatId: "active",
+  };
+  while (estimatedStateBytes(state) <= MAX_STORED_BYTES) {
+    state.chats.push(
+      chat(
+        `extra-${state.chats.length}`,
+        state.chats.length,
+        [largeMessage("z".repeat(MAX_MESSAGE_CHARACTERS))],
+      ),
+    );
+  }
+
+  const report = enforceRetention(state);
+
+  assert(estimatedStateBytes(state) <= MAX_STORED_BYTES);
+  assert(state.chats.some((item) => item.id === "active"));
+  assert(report.removedChats > 0);
 });
