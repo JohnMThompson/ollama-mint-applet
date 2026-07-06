@@ -149,6 +149,9 @@ build version must match it:
 ./scripts/build-deb.sh 0.1.0
 ```
 
+Release validation of the hardened user service is documented in the
+[Linux Mint 22 systemd smoke test](docs/systemd-smoke-test.md).
+
 ## Run the Browser UI from Source
 
 ```bash
