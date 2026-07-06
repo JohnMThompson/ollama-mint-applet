@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   systemPrompt: "",
   temperature: 0.7,
   contextMessages: 16,
+  generateTitles: false,
 });
 
 function finiteNumber(value, fallback) {
@@ -36,6 +37,7 @@ function normalizedSettings(settings) {
     contextMessages: Math.round(
       boundedNumber(source.contextMessages, DEFAULT_SETTINGS.contextMessages, 2, 40),
     ),
+    generateTitles: source.generateTitles === true,
   };
 }
 

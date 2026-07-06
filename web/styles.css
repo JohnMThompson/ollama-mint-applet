@@ -304,6 +304,16 @@ button {
   gap: 12px;
 }
 
+.checkbox-setting {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.checkbox-setting input {
+  width: auto;
+}
+
 .messages {
   min-height: 0;
   overflow-y: auto;

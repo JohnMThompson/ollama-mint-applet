@@ -14,6 +14,7 @@ const els = {
   composer: document.querySelector("#composer"),
   connectionStatus: document.querySelector("#connectionStatus"),
   contextInput: document.querySelector("#contextInput"),
+  generateTitlesInput: document.querySelector("#generateTitlesInput"),
   menuButton: document.querySelector("#menuButton"),
   messages: document.querySelector("#messages"),
   modelDialog: document.querySelector("#modelDialog"),
@@ -47,6 +48,7 @@ let state = loadPersistedState(localStorage, {
 });
 reportRetention(enforceRetention(state));
 let abortController = null;
+let titleAbortController = null;
 let runningModels = [];
 
 init();
@@ -93,7 +95,13 @@ function bindEvents() {
   els.modelDialog.addEventListener("cancel", (event) => event.preventDefault());
   els.modelDialogForm.addEventListener("submit", loadSelectedModel);
 
-  for (const input of [els.systemPrompt, els.temperatureInput, els.contextInput, els.modelSelect]) {
+  for (const input of [
+    els.systemPrompt,
+    els.temperatureInput,
+    els.contextInput,
+    els.generateTitlesInput,
+    els.modelSelect,
+  ]) {
     input.addEventListener("change", saveCurrentSettings);
   }
 }
@@ -274,6 +282,7 @@ function defaultSettings() {
     systemPrompt: "",
     temperature: 0.7,
     contextMessages: 16,
+    generateTitles: false,
   };
 }
 
@@ -292,6 +301,7 @@ function render() {
   els.systemPrompt.value = chat.settings.systemPrompt || "";
   els.temperatureInput.value = chat.settings.temperature ?? 0.7;
   els.contextInput.value = chat.settings.contextMessages ?? 16;
+  els.generateTitlesInput.checked = chat.settings.generateTitles === true;
   if (chat.settings.model) els.modelSelect.value = chat.settings.model;
   renderChatList();
   renderMessages();
@@ -422,6 +432,8 @@ async function sendMessage(content) {
     if (!runningModels.length) return;
   }
   const chat = ensureActiveChat();
+  titleAbortController?.abort();
+  titleAbortController = null;
   const userMessage = { role: "user", content, createdAt: Date.now() };
   const assistantMessage = { role: "assistant", content: "", createdAt: Date.now() };
   chat.messages.push(userMessage, assistantMessage);
@@ -466,7 +478,9 @@ async function sendMessage(content) {
     chat.updatedAt = Date.now();
     render();
     if (chat.title === "New chat" && assistantMessage.content.trim()) {
-      summarizeChatTitle(chat);
+      chat.title = makeFallbackTitle(content);
+      render();
+      if (chat.settings.generateTitles) generateChatTitle(chat);
     }
   }
 }
@@ -492,14 +506,14 @@ function buildRequest(chat) {
   };
 }
 
-async function summarizeChatTitle(chat) {
+async function generateChatTitle(chat) {
   const firstUserMessage = chat.messages.find((message) => message.role === "user")?.content || "";
   const firstAssistantMessage = chat.messages.find((message) => message.role === "assistant")?.content || "";
-  if (!firstUserMessage || !firstAssistantMessage) return;
+  if (!firstUserMessage || !firstAssistantMessage || abortController) return;
 
-  chat.title = makeFallbackTitle(firstUserMessage);
-  render();
-
+  const controller = new AbortController();
+  titleAbortController?.abort();
+  titleAbortController = controller;
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -518,6 +532,7 @@ async function summarizeChatTitle(chat) {
         ],
         options: { temperature: 0.2 },
       }),
+      signal: controller.signal,
     });
     if (!response.ok || !response.body) return;
 
@@ -526,13 +541,15 @@ async function summarizeChatTitle(chat) {
       title += chunk;
     });
     const cleaned = cleanTitle(title);
-    if (cleaned) {
+    if (cleaned && !controller.signal.aborted && !abortController) {
       chat.title = cleaned;
       chat.updatedAt = Date.now();
       render();
     }
-  } catch {
-    saveState();
+  } catch (error) {
+    if (error.name !== "AbortError") saveState();
+  } finally {
+    if (titleAbortController === controller) titleAbortController = null;
   }
 }
 
@@ -543,6 +560,7 @@ function saveCurrentSettings() {
     systemPrompt: els.systemPrompt.value,
     temperature: Number(els.temperatureInput.value || 0.7),
     contextMessages: Number(els.contextInput.value || 16),
+    generateTitles: els.generateTitlesInput.checked,
   };
   saveState();
 }

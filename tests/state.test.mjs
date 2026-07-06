@@ -54,8 +54,31 @@ test("migrates and repairs legacy chat state", () => {
     systemPrompt: "",
     temperature: 2,
     contextMessages: 2,
+    generateTitles: false,
   });
   assert.equal(state.activeChatId, "recovered-1");
+});
+
+
+test("preserves only explicit model-title opt in", () => {
+  for (const [stored, expected] of [
+    [true, true],
+    [false, false],
+    ["true", false],
+    [1, false],
+  ]) {
+    const state = normalizePersistedState({
+      chats: [
+        {
+          id: "chat",
+          messages: [],
+          settings: { generateTitles: stored },
+        },
+      ],
+      activeChatId: "chat",
+    });
+    assert.equal(state.chats[0].settings.generateTitles, expected);
+  }
 });
 
 
