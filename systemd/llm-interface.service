@@ -8,7 +8,7 @@ WorkingDirectory=@WORKING_DIRECTORY@
 Environment=PORT=17865
 Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
 Environment=OLLAMA_MODEL=mistral
-ExecStart=@EXEC_START@
+ExecStart=/usr/bin/env @EXEC_START@
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes

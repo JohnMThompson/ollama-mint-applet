@@ -34,6 +34,9 @@ jobs:
           node --check web/stream.js
           node --check cinnamon/local-mistral-chat@local/applet.js
 
+      - name: Install JavaScript test dependencies
+        run: npm ci
+
       - name: Run JavaScript tests
         run: node --test tests/*.test.mjs
 

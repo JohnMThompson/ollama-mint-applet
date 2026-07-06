@@ -27,10 +27,23 @@ def systemd_quote(value, *, expand_environment=False):
     return f'"{"".join(escaped)}"'
 
 
+def systemd_path(value):
+    escaped = []
+    for byte in str(value).encode("utf-8"):
+        character = chr(byte)
+        if character.isascii() and (character.isalnum() or character in "/_.-"):
+            escaped.append(character)
+        elif character == "%":
+            escaped.append("%%")
+        else:
+            escaped.append(f"\\x{byte:02x}")
+    return "".join(escaped)
+
+
 def render_unit(template, repository):
     repository = Path(repository).resolve()
     replacements = {
-        "@WORKING_DIRECTORY@": systemd_quote(repository),
+        "@WORKING_DIRECTORY@": systemd_path(repository),
         "@EXEC_START@": systemd_quote(
             repository / "scripts/run-llm-interface-service.sh",
             expand_environment=True,

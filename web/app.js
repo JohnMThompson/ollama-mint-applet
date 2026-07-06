@@ -322,10 +322,11 @@ function renderChatList() {
 function renderChatItem(chat) {
   const item = document.createElement("div");
   item.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
-  const openChat = () => {
+  const openChat = ({ restoreFocus = false } = {}) => {
     state.activeChatId = chat.id;
     render();
     closeMobileSidebar();
+    if (restoreFocus) focusChatControl(chat.id, "open");
   };
 
   const label = document.createElement("span");
@@ -346,7 +347,10 @@ function renderChatItem(chat) {
   open.setAttribute("aria-label", `Open chat: ${chat.title}`);
   if (chat.id === state.activeChatId) open.setAttribute("aria-current", "page");
   open.append(text);
-  open.addEventListener("click", openChat);
+  open.dataset.chatId = chat.id;
+  open.addEventListener("click", (event) => {
+    openChat({ restoreFocus: event.detail === 0 });
+  });
 
   const del = document.createElement("button");
   del.type = "button";
@@ -354,7 +358,10 @@ function renderChatItem(chat) {
   del.textContent = "×";
   del.title = "Delete chat";
   del.setAttribute("aria-label", `Delete chat: ${chat.title}`);
-  del.addEventListener("click", () => deleteChat(chat.id));
+  del.dataset.chatId = chat.id;
+  del.addEventListener("click", (event) => {
+    deleteChat(chat.id, { restoreFocus: event.detail === 0 });
+  });
 
   const rename = document.createElement("button");
   rename.type = "button";
@@ -362,7 +369,10 @@ function renderChatItem(chat) {
   rename.textContent = "✎";
   rename.title = "Rename chat";
   rename.setAttribute("aria-label", `Rename chat: ${chat.title}`);
-  rename.addEventListener("click", () => renameChat(chat.id));
+  rename.dataset.chatId = chat.id;
+  rename.addEventListener("click", (event) => {
+    renameChat(chat.id, { restoreFocus: event.detail === 0 });
+  });
 
   const actions = document.createElement("span");
   actions.className = "chat-item-actions";
@@ -564,13 +574,24 @@ function saveCurrentSettings() {
   saveState();
 }
 
-function deleteChat(id) {
+function focusChatControl(id, control) {
+  requestAnimationFrame(() => {
+    const selector =
+      control === "open"
+        ? `.open-chat[data-chat-id="${CSS.escape(id)}"]`
+        : `.${control}-chat[data-chat-id="${CSS.escape(id)}"]`;
+    (document.querySelector(selector) || document.querySelector(".open-chat"))?.focus();
+  });
+}
+
+function deleteChat(id, { restoreFocus = false } = {}) {
   state.chats = state.chats.filter((chat) => chat.id !== id);
   if (state.activeChatId === id) state.activeChatId = state.chats[0]?.id || null;
   render();
+  if (restoreFocus) focusChatControl(state.activeChatId, "open");
 }
 
-function renameChat(id) {
+function renameChat(id, { restoreFocus = false } = {}) {
   const chat = state.chats.find((item) => item.id === id);
   if (!chat) return;
 
@@ -583,6 +604,7 @@ function renameChat(id) {
   chat.title = cleaned;
   chat.updatedAt = Date.now();
   render();
+  if (restoreFocus) focusChatControl(id, "rename");
 }
 
 function stopGeneration() {
