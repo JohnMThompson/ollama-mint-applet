@@ -23,7 +23,6 @@ def test_service_applies_privilege_and_filesystem_restrictions():
 
     for name in (
         "NoNewPrivileges",
-        "PrivateDevices",
         "PrivateTmp",
         "ProtectControlGroups",
         "ProtectKernelModules",
@@ -36,8 +35,13 @@ def test_service_applies_privilege_and_filesystem_restrictions():
         "MemoryDenyWriteExecute",
     ):
         assert directives[name] in {"yes", "strict"}
-    assert directives["CapabilityBoundingSet"] == ""
-    assert directives["AmbientCapabilities"] == ""
+
+    for name in (
+        "PrivateDevices",
+        "CapabilityBoundingSet",
+        "AmbientCapabilities",
+    ):
+        assert name not in directives
 
 
 def test_service_preserves_source_reads_and_loopback_network_families():

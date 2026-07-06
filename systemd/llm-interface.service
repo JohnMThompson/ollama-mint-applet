@@ -12,7 +12,6 @@ ExecStart=/usr/bin/env @EXEC_START@
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes
-PrivateDevices=yes
 PrivateTmp=yes
 ProtectControlGroups=yes
 ProtectHome=read-only
@@ -25,8 +24,6 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
 SystemCallArchitectures=native
 UMask=0077
 
