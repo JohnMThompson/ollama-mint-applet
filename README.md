@@ -165,6 +165,9 @@ locale, and timezone. Verify two isolated builds are byte-for-byte identical:
 Release validation of the hardened user service is documented in the
 [Linux Mint 22 systemd smoke test](docs/systemd-smoke-test.md).
 
+The automated backend, browser, applet, and packaging checks are summarized in
+the [test coverage matrix](docs/test-coverage.md).
+
 ## Run the Browser UI from Source
 
 ```bash

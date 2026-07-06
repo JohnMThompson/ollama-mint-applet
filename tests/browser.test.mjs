@@ -43,6 +43,21 @@ test.before(async () => {
       });
       return;
     }
+    if (request.url === "/api/chat" && request.method === "POST") {
+      request.resume();
+      response.writeHead(200, {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store",
+      });
+      response.write('{"message":{"content":"streamed"}}\n');
+      const lateWrite = setTimeout(() => {
+        if (!response.destroyed) {
+          response.end('{"message":{"content":" late"},"done":true}');
+        }
+      }, 500);
+      response.on("close", () => clearTimeout(lateWrite));
+      return;
+    }
     const pathname = request.url.split("?", 1)[0];
     const relative = pathname === "/" ? "index.html" : pathname.slice(1);
     const file = normalize(join(WEB_ROOT, relative));
@@ -267,6 +282,29 @@ test("accessibility tree exposes toggle names, relationships, and changing state
   assert.equal(
     await page.getByRole("button", { name: "Settings" }).getAttribute("aria-expanded"),
     "false",
+  );
+  await context.close();
+});
+
+
+test("browser generation can be cancelled and remains persisted", async () => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(baseUrl);
+  await page.getByLabel("Message", { exact: true }).fill("Stream a response");
+  await page.getByRole("button", { name: "Send" }).click();
+  const assistant = page.locator(".message.assistant .bubble").last();
+  await assistant.filter({ hasText: "streamed" }).waitFor();
+  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("button", { name: "Send" }).waitFor();
+  await page.waitForTimeout(600);
+  assert.equal(await assistant.textContent(), "streamed");
+
+  await page.reload();
+  await page.locator(".message.assistant .bubble").filter({ hasText: "streamed" }).waitFor();
+  assert.equal(
+    await page.locator(".message.assistant .bubble").last().textContent(),
+    "streamed",
   );
   await context.close();
 });
