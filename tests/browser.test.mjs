@@ -308,3 +308,25 @@ test("browser generation can be cancelled and remains persisted", async () => {
   );
   await context.close();
 });
+
+
+for (const height of [800, 360]) {
+  test(`composer remains fully visible in a ${height}px-high viewport`, async () => {
+    const context = await browser.newContext({
+      viewport: { width: 1024, height },
+    });
+    const page = await seededPage(context);
+    const composerBox = await page.locator(".composer").boundingBox();
+    const composerMarginBottom = await page.locator(".composer").evaluate(
+      (element) => parseFloat(getComputedStyle(element).marginBottom),
+    );
+    assert(composerBox);
+    assert.equal(composerMarginBottom, 16);
+    assert(composerBox.y >= 0);
+    assert(
+      composerBox.y + composerBox.height <= height - 16,
+      `composer bottom ${composerBox.y + composerBox.height} exceeds safe content area ${height - 16}`,
+    );
+    await context.close();
+  });
+}

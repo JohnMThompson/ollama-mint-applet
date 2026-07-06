@@ -425,7 +425,7 @@ button {
   width: min(760px, calc(100% - 32px));
   height: 52px;
   max-height: 52px;
-  margin: 0 auto;
+  margin: 0 auto calc(16px + env(safe-area-inset-bottom, 0px));
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
