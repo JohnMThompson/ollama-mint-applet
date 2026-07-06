@@ -149,6 +149,19 @@ build version must match it:
 ./scripts/build-deb.sh 0.1.0
 ```
 
+Reproduce a package with an explicit source timestamp:
+
+```bash
+SOURCE_DATE_EPOCH=1700000000 ./scripts/build-deb.sh
+```
+
+The build normalizes package metadata, ownership, timestamps, compression,
+locale, and timezone. Verify two isolated builds are byte-for-byte identical:
+
+```bash
+./scripts/check-reproducible-build.sh
+```
+
 Release validation of the hardened user service is documented in the
 [Linux Mint 22 systemd smoke test](docs/systemd-smoke-test.md).
 

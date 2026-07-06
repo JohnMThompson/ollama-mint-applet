@@ -8,7 +8,8 @@ architecture="all"
 package_name="local-llm-chat"
 build_root="$(mktemp -d)"
 package_root="${build_root}/${package_name}_${version}_${architecture}"
-output_dir="${repo_dir}/dist"
+output_dir="${OUTPUT_DIR:-${repo_dir}/dist}"
+source_date_epoch="${SOURCE_DATE_EPOCH:-$(git -C "${repo_dir}" log -1 --format=%ct)}"
 
 cleanup() {
     rm -rf "${build_root}"
@@ -24,6 +25,13 @@ if [[ ! "${version}" =~ ^[0-9][0-9A-Za-z.+:~_-]*$ ]]; then
     echo "Invalid Debian package version: ${version}" >&2
     exit 1
 fi
+if [[ ! "${source_date_epoch}" =~ ^[0-9]+$ ]]; then
+    echo "SOURCE_DATE_EPOCH must be a non-negative integer." >&2
+    exit 1
+fi
+export SOURCE_DATE_EPOCH="${source_date_epoch}"
+export TZ=UTC
+export LC_ALL=C
 if [[ "${requested_version}" != "${version}" ]]; then
     echo "Requested version ${requested_version} does not match VERSION (${version})." >&2
     exit 1
@@ -79,7 +87,10 @@ sed "s/@VERSION@/${version}/g" "${repo_dir}/packaging/debian/changelog" \
 chmod 0644 "${package_root}/usr/share/doc/${package_name}/changelog.gz"
 
 output_path="${output_dir}/${package_name}_${version}_${architecture}.deb"
-dpkg-deb --root-owner-group --build "${package_root}" "${output_path}"
+find "${package_root}" -exec \
+    touch --no-dereference --date="@${SOURCE_DATE_EPOCH}" {} +
+dpkg-deb --root-owner-group --uniform-compression --build \
+    "${package_root}" "${output_path}"
 (
     cd "${output_dir}"
     sha256sum "$(basename "${output_path}")" > SHA256SUMS
