@@ -15,7 +15,8 @@ install -m 0644 "${applet_src}/stylesheet.css" "${applet_dest}/stylesheet.css"
 install -m 0644 "${applet_src}/settings-schema.json" "${applet_dest}/settings-schema.json"
 
 install -d "$(dirname "${service_dest}")"
-sed "s|@REPO_DIR@|${repo_dir}|g" "${service_src}" > "${service_dest}"
+python3 "${repo_dir}/scripts/render-systemd-unit.py" \
+    "${service_src}" "${repo_dir}" "${service_dest}"
 
 systemctl --user daemon-reload
 systemctl --user enable --now llm-interface.service

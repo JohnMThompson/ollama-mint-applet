@@ -65,9 +65,10 @@ install -m 0644 "${repo_dir}/web/"* "${package_root}/usr/lib/llm-interface/web/"
 install -m 0644 \
     "${repo_dir}/cinnamon/local-mistral-chat@local/"* \
     "${package_root}/usr/share/cinnamon/applets/local-mistral-chat@local/"
-sed "s|@REPO_DIR@|/usr/lib/llm-interface|g" \
+python3 "${repo_dir}/scripts/render-systemd-unit.py" \
     "${repo_dir}/systemd/llm-interface.service" \
-    > "${package_root}/usr/lib/systemd/user/llm-interface.service"
+    "/usr/lib/llm-interface" \
+    "${package_root}/usr/lib/systemd/user/llm-interface.service"
 chmod 0644 "${package_root}/usr/lib/systemd/user/llm-interface.service"
 ln -s /usr/lib/systemd/user/llm-interface.service \
     "${package_root}/etc/systemd/user/default.target.wants/llm-interface.service"

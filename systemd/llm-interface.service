@@ -4,11 +4,11 @@ After=default.target
 
 [Service]
 Type=simple
-WorkingDirectory=@REPO_DIR@
+WorkingDirectory=@WORKING_DIRECTORY@
 Environment=PORT=17865
 Environment=OLLAMA_BASE_URL=http://127.0.0.1:11434
 Environment=OLLAMA_MODEL=mistral
-ExecStart=@REPO_DIR@/scripts/run-llm-interface-service.sh
+ExecStart=@EXEC_START@
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes
