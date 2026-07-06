@@ -107,6 +107,9 @@ def load_ollama_model(model_name):
     downloaded_names = [model["name"] for model in status["models"]]
     if model_name not in downloaded_names:
         raise ValueError("Model is not downloaded")
+    previous_model = status.get("activeModel")
+    if previous_model is None:
+        previous_model = next(iter(status.get("runningModels", [])), None)
     ollama_json(
         "/api/generate",
         {
@@ -116,6 +119,16 @@ def load_ollama_model(model_name):
         },
         timeout=300,
     )
+    if previous_model and previous_model != model_name:
+        ollama_json(
+            "/api/generate",
+            {
+                "model": previous_model,
+                "keep_alive": 0,
+                "stream": False,
+            },
+            timeout=30,
+        )
     return get_model_status()
 
 

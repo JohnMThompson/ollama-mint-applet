@@ -467,6 +467,55 @@ class ModelStatusTests(unittest.TestCase):
         )
         self.assertEqual(status, after)
 
+    def test_load_model_unloads_previous_active_model_after_loading_replacement(self):
+        before = {
+            "models": [
+                {"name": "mistral:latest"},
+                {"name": "qwen3:0.6b"},
+            ],
+            "runningModels": ["mistral:latest"],
+            "activeModel": "mistral:latest",
+        }
+        after = {
+            "models": [
+                {"name": "mistral:latest", "running": False},
+                {"name": "qwen3:0.6b", "running": True},
+            ],
+            "runningModels": ["qwen3:0.6b"],
+            "activeModel": "qwen3:0.6b",
+        }
+        with mock.patch.object(
+            app,
+            "get_model_status",
+            side_effect=[before, after],
+        ), mock.patch.object(app, "ollama_json") as ollama_json:
+            status = app.load_ollama_model("qwen3:0.6b")
+
+        self.assertEqual(
+            ollama_json.call_args_list,
+            [
+                mock.call(
+                    "/api/generate",
+                    {
+                        "model": "qwen3:0.6b",
+                        "keep_alive": app.OLLAMA_LOAD_KEEP_ALIVE,
+                        "stream": False,
+                    },
+                    timeout=300,
+                ),
+                mock.call(
+                    "/api/generate",
+                    {
+                        "model": "mistral:latest",
+                        "keep_alive": 0,
+                        "stream": False,
+                    },
+                    timeout=30,
+                ),
+            ],
+        )
+        self.assertEqual(status, after)
+
     def test_ollama_http_error_includes_response_message(self):
         error = app.urllib.error.HTTPError(
             "http://ollama/api/generate",

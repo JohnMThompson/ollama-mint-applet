@@ -18,35 +18,32 @@ def service_directives():
     return directives
 
 
-def test_service_applies_privilege_and_filesystem_restrictions():
+def test_service_avoids_unsupported_user_service_sandboxing():
     directives = service_directives()
 
     for name in (
         "NoNewPrivileges",
+        "PrivateDevices",
         "PrivateTmp",
         "ProtectControlGroups",
+        "ProtectHome",
         "ProtectKernelModules",
         "ProtectKernelTunables",
         "ProtectSystem",
+        "RestrictAddressFamilies",
         "RestrictNamespaces",
         "RestrictRealtime",
         "RestrictSUIDSGID",
         "LockPersonality",
         "MemoryDenyWriteExecute",
-    ):
-        assert directives[name] in {"yes", "strict"}
-
-    for name in (
-        "PrivateDevices",
         "CapabilityBoundingSet",
         "AmbientCapabilities",
+        "SystemCallArchitectures",
     ):
         assert name not in directives
 
 
-def test_service_preserves_source_reads_and_loopback_network_families():
+def test_service_sets_restrictive_umask():
     directives = service_directives()
 
-    assert directives["ProtectHome"] == "read-only"
-    families = set(directives["RestrictAddressFamilies"].split())
-    assert families == {"AF_UNIX", "AF_INET", "AF_INET6"}
+    assert directives["UMask"] == "0077"

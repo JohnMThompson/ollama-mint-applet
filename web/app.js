@@ -83,6 +83,7 @@ function bindEvents() {
     els.menuButton.setAttribute("aria-expanded", String(expanded));
   });
   els.stopButton.addEventListener("click", stopGeneration);
+  els.modelSelect.addEventListener("change", changeSelectedModel);
 
   els.promptInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -105,7 +106,6 @@ function bindEvents() {
     els.temperatureInput,
     els.contextInput,
     els.generateTitlesInput,
-    els.modelSelect,
   ]) {
     input.addEventListener("change", saveCurrentSettings);
   }
@@ -249,6 +249,34 @@ async function loadSelectedModel(event) {
   } finally {
     els.loadModelButton.disabled = false;
     els.loadModelButton.textContent = "Load model";
+  }
+}
+
+async function changeSelectedModel() {
+  const model = els.modelSelect.value;
+  const previousModel =
+    activeChat()?.settings?.model || runningModels[0] || "mistral";
+  if (!model || model === previousModel) return;
+
+  els.modelSelect.disabled = true;
+  els.connectionStatus.textContent = `Loading ${model}…`;
+  try {
+    const response = await fetch("/api/models/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Unable to load ${model}`);
+    runningModels = data.runningModels || [model];
+    selectModel(model);
+    els.connectionStatus.textContent = `Using running model ${model}`;
+  } catch (error) {
+    selectModel(previousModel);
+    els.connectionStatus.textContent = error.message;
+    showToast(error.message);
+  } finally {
+    els.modelSelect.disabled = false;
   }
 }
 

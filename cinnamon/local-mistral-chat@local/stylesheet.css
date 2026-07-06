@@ -22,6 +22,10 @@
   font-size: 0.9em;
 }
 
+.local-mistral-chat-change-model {
+  width: 132px;
+}
+
 .local-mistral-chat-model-dialog {
   padding: 14px;
   spacing: 12px;

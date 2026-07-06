@@ -79,6 +79,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.streamRenderSource = 0;
         this.isGenerating = false;
         this.isLoadingModel = false;
+        this.hasActiveModel = false;
 
         this.set_applet_label("✨");
         this.set_applet_tooltip("Local LLM Chat");
@@ -148,6 +149,16 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.statusLabel.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
         header.add_actor(this.titleLabel);
         header.add_actor(this.statusLabel);
+        this.changeModelButton = new St.Button({
+            label: "Change model",
+            style_class: "local-mistral-chat-button local-mistral-chat-change-model",
+            can_focus: true,
+            visible: false
+        });
+        this.changeModelButton.connect("clicked", Lang.bind(this, function() {
+            this._showModelChooser(this.modelNames, true);
+        }));
+        header.add_actor(this.changeModelButton);
 
         this.modelChooser = new St.BoxLayout({
             vertical: true,
@@ -326,10 +337,13 @@ class LocalMistralChatApplet extends Applet.TextApplet {
                 this.modelNames = names;
                 if (data.activeModel) {
                     this.model = data.activeModel;
+                    this.hasActiveModel = true;
                 } else {
+                    this.hasActiveModel = false;
                     this.model = this._resolveModelName(this.modelName || data.defaultModel || DEFAULT_MODEL, names);
                 }
                 this._syncModelOptions();
+                this.changeModelButton.visible = names.length > 0 && this.hasActiveModel;
                 if (data.activeModel && this.model !== this.modelName) {
                     this.modelName = this.model;
                     this.settings.setValue("model-name", this.model);
@@ -339,7 +353,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
                     this.statusLabel.set_text("Using running model " + data.activeModel);
                 } else {
                     this.statusLabel.set_text(names.length ? "No model running" : "No downloaded models");
-                    this._showModelChooser(names);
+                    this._showModelChooser(names, false);
                 }
             } catch (e) {
                 this.statusLabel.set_text("Invalid response from local server");
@@ -347,7 +361,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         }));
     }
 
-    _showModelChooser(names) {
+    _showModelChooser(names, allowCancel) {
         this.modelChoices.destroy_all_children();
         if (!names.length) {
             this.modelChoices.add_actor(new St.Label({
@@ -367,10 +381,23 @@ class LocalMistralChatApplet extends Applet.TextApplet {
             }));
             this.modelChoices.add_actor(button);
         }
+        if (allowCancel) {
+            let cancelButton = new St.Button({
+                label: "Cancel",
+                style_class: "local-mistral-chat-button",
+                can_focus: true
+            });
+            cancelButton.connect("clicked", Lang.bind(this, function() {
+                this._hideModelChooser();
+                this._focusPrompt();
+            }));
+            this.modelChoices.add_actor(cancelButton);
+        }
         this.modelChooser.visible = true;
         this.scrollView.visible = false;
         this.prompt.visible = false;
         this.sendButton.reactive = false;
+        this.changeModelButton.reactive = false;
     }
 
     _hideModelChooser() {
@@ -379,6 +406,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
         this.scrollView.visible = true;
         this.prompt.visible = true;
         this.sendButton.reactive = !this.isGenerating;
+        this.changeModelButton.reactive = !this.isGenerating;
     }
 
     _loadModel(modelName) {
@@ -405,12 +433,14 @@ class LocalMistralChatApplet extends Applet.TextApplet {
                     // Use the generic error.
                 }
                 this.statusLabel.set_text(error);
-                this._showModelChooser(this.modelNames);
+                this._showModelChooser(this.modelNames, this.hasActiveModel);
                 return;
             }
             this.model = modelName;
             this.modelName = modelName;
+            this.hasActiveModel = true;
             this.settings.setValue("model-name", modelName);
+            this.changeModelButton.visible = true;
             this._hideModelChooser();
             this.statusLabel.set_text("Using running model " + modelName);
             this._focusPrompt();
@@ -752,6 +782,7 @@ class LocalMistralChatApplet extends Applet.TextApplet {
     _setGenerating(isGenerating) {
         this.isGenerating = isGenerating;
         this.sendButton.reactive = !isGenerating;
+        this.changeModelButton.reactive = !isGenerating;
         this.stopButton.visible = isGenerating;
     }
 

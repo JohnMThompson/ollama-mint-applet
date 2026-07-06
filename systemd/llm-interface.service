@@ -11,20 +11,6 @@ Environment=OLLAMA_MODEL=mistral
 ExecStart=/usr/bin/env @EXEC_START@
 Restart=on-failure
 RestartSec=3
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectControlGroups=yes
-ProtectHome=read-only
-ProtectKernelModules=yes
-ProtectKernelTunables=yes
-ProtectSystem=strict
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes
-SystemCallArchitectures=native
 UMask=0077
 
 [Install]

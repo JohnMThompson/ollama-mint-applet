@@ -19,6 +19,7 @@ const CHROME = CHROME_PATHS.find(existsSync);
 let browser;
 let server;
 let baseUrl;
+let loadedModel;
 
 
 function sendJson(response, payload) {
@@ -36,10 +37,27 @@ test.before(async () => {
   server = createServer((request, response) => {
     if (request.url === "/api/models") {
       sendJson(response, {
-        models: [{ name: "mistral" }],
-        runningModels: ["mistral"],
-        activeModel: "mistral",
+        models: [{ name: "mistral" }, { name: "qwen3:0.6b" }],
+        runningModels: [loadedModel || "mistral"],
+        activeModel: loadedModel || "mistral",
         defaultModel: "mistral",
+      });
+      return;
+    }
+    if (request.url === "/api/models/load" && request.method === "POST") {
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        loadedModel = JSON.parse(body).model;
+        sendJson(response, {
+          models: [{ name: "mistral" }, { name: "qwen3:0.6b" }],
+          runningModels: [loadedModel],
+          activeModel: loadedModel,
+          defaultModel: "mistral",
+        });
       });
       return;
     }
@@ -306,6 +324,28 @@ test("browser generation can be cancelled and remains persisted", async () => {
     await page.locator(".message.assistant .bubble").last().textContent(),
     "streamed",
   );
+  await context.close();
+});
+
+test("model dropdown loads an installed model and saves it for the chat", async () => {
+  loadedModel = "mistral";
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(baseUrl);
+
+  await page.getByLabel("Model", { exact: true }).selectOption("qwen3:0.6b");
+  await page.getByText("Using running model qwen3:0.6b").waitFor();
+
+  assert.equal(loadedModel, "qwen3:0.6b");
+  assert.equal(
+    await page.getByLabel("Model", { exact: true }).inputValue(),
+    "qwen3:0.6b",
+  );
+  const savedModel = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("local-mistral-chat-state-v1"));
+    return state.chats.find((chat) => chat.id === state.activeChatId).settings.model;
+  });
+  assert.equal(savedModel, "qwen3:0.6b");
   await context.close();
 });
 
