@@ -9,10 +9,7 @@ service_src="${repo_dir}/systemd/llm-interface.service"
 service_dest="${HOME}/.config/systemd/user/llm-interface.service"
 
 install -d "${applet_dest}"
-install -m 0644 "${applet_src}/metadata.json" "${applet_dest}/metadata.json"
-install -m 0644 "${applet_src}/applet.js" "${applet_dest}/applet.js"
-install -m 0644 "${applet_src}/stylesheet.css" "${applet_dest}/stylesheet.css"
-install -m 0644 "${applet_src}/settings-schema.json" "${applet_dest}/settings-schema.json"
+install -m 0644 "${applet_src}/"* "${applet_dest}/"
 
 install -d "$(dirname "${service_dest}")"
 python3 "${repo_dir}/scripts/render-systemd-unit.py" \
