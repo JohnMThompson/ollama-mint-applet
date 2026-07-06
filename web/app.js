@@ -1,4 +1,5 @@
 import { readStream } from "./stream.js";
+import { createDebouncedTask, createFrameScheduler } from "./scheduler.js";
 import {
   createStatePersistence,
   enforceRetention,
@@ -430,6 +431,14 @@ async function sendMessage(content) {
   render();
 
   abortController = new AbortController();
+  const assistantBubbles = els.messages.querySelectorAll(".message.assistant .bubble");
+  const activeBubble = assistantBubbles[assistantBubbles.length - 1];
+  const streamedRender = createFrameScheduler(() => {
+    if (!activeBubble?.isConnected) return;
+    activeBubble.innerHTML = renderMarkdown(assistantMessage.content);
+    scrollToBottom();
+  });
+  const streamedPersistence = createDebouncedTask(saveState, 750);
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -441,8 +450,8 @@ async function sendMessage(content) {
     await readStream(response.body, (chunk) => {
       assistantMessage.content += chunk;
       chat.updatedAt = Date.now();
-      renderMessages();
-      saveState();
+      streamedRender.schedule();
+      streamedPersistence.schedule();
     });
   } catch (error) {
     if (error.name !== "AbortError") {
@@ -450,6 +459,8 @@ async function sendMessage(content) {
       showToast(error.message);
     }
   } finally {
+    streamedRender.cancel();
+    streamedPersistence.cancel();
     abortController = null;
     setGenerating(false);
     chat.updatedAt = Date.now();
