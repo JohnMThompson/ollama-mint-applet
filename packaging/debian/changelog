@@ -1,7 +1,5 @@
 local-llm-chat (@VERSION@) unstable; urgency=medium
 
-  * Switch among installed models from the web chat and Cinnamon applet.
-  * Unload the previous model after its replacement is ready.
-  * Fix user-service startup on systems that reject service sandboxing.
+  * Fix user-service startup when a stale health check leaves the applet backend down after boot.
 
- -- JohnMThompson <johnmichaelthomp@gmail.com>  Mon, 06 Jul 2026 15:20:00 -0500
+ -- JohnMThompson <johnmichaelthomp@gmail.com>  Fri, 17 Jul 2026 12:10:00 -0500
